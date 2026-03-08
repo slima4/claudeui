@@ -261,7 +261,7 @@ def parse_transcript(transcript_path):
             and obj.get("subtype") == "compact_boundary"
         ):
             result["compact_count"] += 1
-            result["context_history"].append(0)
+            result["context_history"].append(None)
 
         # Tool calls, thinking, errors, files, and subagents
         if obj.get("type") == "assistant" and "message" in obj:
@@ -372,25 +372,63 @@ def format_duration(start_timestamp):
         return "?m"
 
 
-def build_sparkline(values, width=20):
-    """Build a sparkline string from a list of values."""
+def build_sparkline(values, max_context, width=20):
+    """Build a colored sparkline with absolute scale and compaction markers.
+
+    Args:
+        values: list of token counts (None = compaction event).
+        max_context: model's max context window size for absolute scaling.
+        width: max number of characters to render.
+
+    Returns:
+        ANSI-colored sparkline string.
+    """
     if not values:
         return ""
-    # Downsample if too many points
+    # Keep only the last 3 compaction markers; replace older ones with 0
+    none_indices = [i for i, v in enumerate(values) if v is None]
+    keep_set = set(none_indices[-3:])
+    cleaned = []
+    for i, v in enumerate(values):
+        if v is None and i not in keep_set:
+            cleaned.append(0)
+        else:
+            cleaned.append(v)
+    values = cleaned
+
+    # Downsample with peak-preserving buckets
     if len(values) > width:
         step = len(values) / width
         sampled = []
         for i in range(width):
-            idx = int(i * step)
-            sampled.append(values[idx])
+            start = int(i * step)
+            end = int((i + 1) * step)
+            bucket = values[start:end]
+            if None in bucket:
+                sampled.append(None)
+            else:
+                sampled.append(max(bucket))
         values = sampled
 
     blocks = "▁▂▃▄▅▆▇█"
-    max_val = max(values) if max(values) > 0 else 1
+    scale = max_context if max_context > 0 else 1
     chars = []
     for v in values:
-        idx = int(v / max_val * (len(blocks) - 1))
-        chars.append(blocks[idx])
+        if v is None:
+            chars.append(f"{MAGENTA}↓{RESET}")
+            continue
+        r = v / scale
+        idx = int(r * (len(blocks) - 1))
+        idx = max(0, min(idx, len(blocks) - 1))
+        if r < 0.50:
+            color = GREEN
+        elif r < 0.75:
+            color = YELLOW
+        elif r < 0.90:
+            color = ORANGE
+        else:
+            color = RED
+        chars.append(f"{color}{blocks[idx]}{RESET}")
     return "".join(chars)
 
 
@@ -494,20 +532,10 @@ def main():
 
     sep = f" {GRAY}|{RESET} "
 
-    # Context sparkline
-    sparkline = build_sparkline(metrics["context_history"])
-    sparkline_part = ""
-    if sparkline:
-        # Color the sparkline based on current ratio
-        if ratio < 0.50:
-            spark_color = GREEN
-        elif ratio < 0.75:
-            spark_color = YELLOW
-        elif ratio < 0.90:
-            spark_color = ORANGE
-        else:
-            spark_color = RED
-        sparkline_part = f"{spark_color}{sparkline}{RESET}"
+    # Context sparkline (absolute scale, per-char coloring, compaction markers)
+    sparkline_part = build_sparkline(
+        metrics["context_history"], max_context=CONTEXT_LIMIT
+    )
 
     dim = GRAY
     sep = f" {dim}│{RESET} "

@@ -18,7 +18,7 @@ Three-line layout with Matrix binary rain animation on the left:
 ## Features
 
 - **Context usage** — progress bar with color coding (green → yellow → orange → red)
-- **Context sparkline** — visual history of context growth; compactions show as cliffs (`█▁▂▃`)
+- **Context sparkline** — visual history of context usage scaled to the model's 200k limit; each bar is colored by its own threshold (green/yellow/orange/red), compactions marked with `↓`
 - **Session cost** — estimated USD cost based on model pricing (input, cache read, output tokens)
 - **Cost per turn** — average cost per conversation turn
 - **Session duration** — how long since the first message
