@@ -3,7 +3,7 @@
 A lightweight Python script that adds a real-time context window usage indicator to [Claude Code](https://docs.anthropic.com/en/docs/claude-code)'s status line.
 
 ```
- 0110100 Opus 4.6 │ ████████░░░░░░░░░░░░ 42% 65.5k/200.0k │ ▁▂▃▅▆▇█▃▄▅ │ $2.34 │ 12m │ 0x compact │ #a1b2c3d4
+ 0110100 Opus 4.6 │ ████████░░░░░░░░░░░░ 42% 65.5k/200.0k │ ▁▂▃▅▆▇↓▁▃▅ │ $2.34 │ 12m │ 0x compact │ #a1b2c3d4
  1001011 ai-toolbox │ main +42 -17 │ 18 turns │ 5 files │ 0 err │ 82% cache │ 4x think │ ~$0.13/turn
  0110010 read statusline.py → edit statusline.py → bash python3 → edit README.md │ statusline.py×3 README.md×1
 ```
