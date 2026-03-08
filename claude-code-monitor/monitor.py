@@ -121,12 +121,12 @@ def parse_transcript(path):
         "thinking_count": 0, "subagent_count": 0, "turns_since_compact": 0,
         "recent_tools": [],  # last N tool calls for live trace
         "last_error_msg": "",
-        # Current phase (since last compaction)
-        "phase_tool_counts": Counter(),
-        "phase_tool_errors": 0,
-        "phase_files_read": Counter(),
-        "phase_files_edited": Counter(),
-        "phase_thinking": 0,
+        # Current turn (current question/answer)
+        "turn_tool_counts": Counter(),
+        "turn_tool_errors": 0,
+        "turn_files_read": Counter(),
+        "turn_files_edited": Counter(),
+        "turn_thinking": 0,
         # Turn timer
         "last_user_ts": None,   # timestamp of last user message
         "last_assist_ts": None, # timestamp of last assistant response
@@ -179,6 +179,12 @@ def parse_transcript(path):
                 r["turns_since_compact"] += 1
                 r["last_user_ts"] = ts
                 r["waiting_for_response"] = True
+                r["recent_tools"] = []
+                r["turn_tool_counts"] = Counter()
+                r["turn_tool_errors"] = 0
+                r["turn_files_read"] = Counter()
+                r["turn_files_edited"] = Counter()
+                r["turn_thinking"] = 0
 
         # Tool errors
         if etype == "user" and "message" in obj:
@@ -189,7 +195,7 @@ def parse_transcript(path):
                             and block.get("type") == "tool_result"
                             and block.get("is_error")):
                         r["tool_errors"] += 1
-                        r["phase_tool_errors"] += 1
+                        r["turn_tool_errors"] += 1
                         # Capture error message
                         err_content = block.get("content", "")
                         if isinstance(err_content, list):
@@ -223,7 +229,7 @@ def parse_transcript(path):
                         if block.get("type") == "tool_use":
                             name = block.get("name", "unknown")
                             r["tool_counts"][name] += 1
-                            r["phase_tool_counts"][name] += 1
+                            r["turn_tool_counts"][name] += 1
                             inp = block.get("input", {})
                             if name in ("Task", "Agent"):
                                 tid = block.get("id", "")
@@ -235,10 +241,10 @@ def parse_transcript(path):
                                 fname = os.path.basename(fp)
                                 if name in ("Edit", "Write", "MultiEdit"):
                                     r["files_edited"][fname] += 1
-                                    r["phase_files_edited"][fname] += 1
+                                    r["turn_files_edited"][fname] += 1
                                 else:
                                     r["files_read"][fname] += 1
-                                    r["phase_files_read"][fname] += 1
+                                    r["turn_files_read"][fname] += 1
                                 trace_entry = f"{name.lower()} {fname}"
                                 r["recent_tools"].append(trace_entry)
                                 r["event_log"].append((ts, trace_entry))
@@ -262,7 +268,7 @@ def parse_transcript(path):
                                 r["recent_tools"].append(trace_entry)
             if has_thinking:
                 r["thinking_count"] += 1
-                r["phase_thinking"] += 1
+                r["turn_thinking"] += 1
             if usage:
                 inp_t = usage.get("input_tokens", 0)
                 cache_r = usage.get("cache_read_input_tokens", 0)
@@ -292,11 +298,6 @@ def parse_transcript(path):
                 "turns_since_last": r["turns_since_compact"],
             })
             r["turns_since_compact"] = 0
-            r["phase_tool_counts"] = Counter()
-            r["phase_tool_errors"] = 0
-            r["phase_files_read"] = Counter()
-            r["phase_files_edited"] = Counter()
-            r["phase_thinking"] = 0
 
     r["subagent_count"] = len(subagents)
     r["last_context"] = last_context
@@ -577,40 +578,49 @@ def render_dashboard(r, idle_secs, just_updated, term_width):
 
     lines.append("")
 
-    # ── Activity: Current phase (since last compaction) ──
-    phase_label = "CURRENT"
-    if r["compact_count"] > 0:
-        phase_label = f"CURRENT  {DIM}(since compact #{r['compact_count']}){RESET}"
-    lines.append(f"  {BOLD}{phase_label}{RESET}")
+    # ── Activity: Current turn (this question/answer) ──
+    lines.append(f"  {BOLD}CURRENT{RESET}")
 
-    phase_tools = sum(r["phase_tool_counts"].values())
-    phase_top3 = r["phase_tool_counts"].most_common(3)
-    phase_tools_str = "  ".join(f"{DIM}{t}:{RESET}{CYAN}{c}{RESET}" for t, c in phase_top3)
-    lines.append(f"  {CYAN}{r['turns_since_compact']}{RESET} turns  {DIM}│{RESET}  {CYAN}{phase_tools}{RESET} tools  {DIM}│{RESET}  {phase_tools_str}")
+    turn_tools = sum(r["turn_tool_counts"].values())
+    turn_top3 = r["turn_tool_counts"].most_common(3)
+    turn_tools_str = "  ".join(f"{DIM}{t}:{RESET}{CYAN}{c}{RESET}" for t, c in turn_top3)
+    lines.append(f"  {CYAN}{turn_tools}{RESET} tools  {DIM}│{RESET}  {turn_tools_str}")
 
-    # Live tool trace
-    if r["recent_tools"]:
-        trace = f" {DIM}→{RESET} ".join(
-            f"{DIM}{t}{RESET}" for t in r["recent_tools"]
-        )
-        lines.append(f"  {trace}")
+    # Live tool trace + file edit counts (same format as statusline)
+    if r["recent_tools"] or r["turn_files_edited"]:
+        parts = []
+        if r["recent_tools"]:
+            trail = []
+            for t in r["recent_tools"][-6:]:
+                p = t.split()
+                if len(p) >= 2:
+                    trail.append(f"{DIM}{p[0].lower()}{RESET} {GREEN}{p[-1]}{RESET}")
+                else:
+                    trail.append(f"{DIM}{p[0].lower()}{RESET}")
+            parts.append(f" {DIM}→{RESET} ".join(trail))
+        if r["turn_files_edited"]:
+            top = sorted(r["turn_files_edited"].items(), key=lambda x: -x[1])[:3]
+            parts.append(" ".join(
+                f"{YELLOW}{n}{RESET}{DIM}×{c}{RESET}" for n, c in top
+            ))
+        lines.append(f"  {f' {DIM}│{RESET} '.join(parts)}")
 
-    # Current phase files
-    phase_all_files = set(list(r["phase_files_read"].keys()) + list(r["phase_files_edited"].keys()))
-    phase_top_files = sorted(
-        phase_all_files,
-        key=lambda f: -(r["phase_files_read"].get(f, 0) + r["phase_files_edited"].get(f, 0))
+    # Current turn files
+    turn_all_files = set(list(r["turn_files_read"].keys()) + list(r["turn_files_edited"].keys()))
+    turn_top_files = sorted(
+        turn_all_files,
+        key=lambda f: -(r["turn_files_read"].get(f, 0) + r["turn_files_edited"].get(f, 0))
     )[:5]
-    if phase_top_files:
+    if turn_top_files:
         file_parts = []
-        for f in phase_top_files:
-            reads = r["phase_files_read"].get(f, 0)
-            edits = r["phase_files_edited"].get(f, 0)
+        for f in turn_top_files:
+            reads = r["turn_files_read"].get(f, 0)
+            edits = r["turn_files_edited"].get(f, 0)
             file_parts.append(f"{GREEN}{f}{RESET}{DIM}({reads}r/{edits}e){RESET}")
         lines.append(f"  {' '.join(file_parts)}")
 
-    phase_err_color = RED if r["phase_tool_errors"] > 3 else ORANGE if r["phase_tool_errors"] > 0 else GREEN
-    lines.append(f"  {phase_err_color}{r['phase_tool_errors']}{RESET} errors  {DIM}│{RESET}  {MAGENTA}{r['phase_thinking']}{RESET} thinking")
+    turn_err_color = RED if r["turn_tool_errors"] > 3 else ORANGE if r["turn_tool_errors"] > 0 else GREEN
+    lines.append(f"  {turn_err_color}{r['turn_tool_errors']}{RESET} errors  {DIM}│{RESET}  {MAGENTA}{r['turn_thinking']}{RESET} thinking")
 
     # Last error detail
     if r["last_error_msg"]:

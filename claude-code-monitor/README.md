@@ -18,11 +18,11 @@ A standalone terminal dashboard that monitors your active Claude Code session in
   ██████████████████████████████████████████████████
   ■input 0%  ■cache 85%  ■output 15%
 
-  CURRENT  (since compact #2)
-  28 turns  │  89 tools  │  Edit:34  Read:28  Bash:27
-  read monitor.py → edit monitor.py → bash python3
-  monitor.py(12r/15e) README.md(5r/8e)
-  1 errors  │  4 thinking
+  CURRENT
+  12 tools  │  Edit:5  Read:4  Bash:3
+  read monitor.py → edit monitor.py → bash python3 │ monitor.py×5
+  monitor.py(4r/5e) README.md(1r/1e)
+  0 errors  │  1 thinking
 
   SESSION
   53 turns  │  312 tools  │  Bash:98  Edit:87  Read:72
@@ -76,7 +76,7 @@ Press any key after viewing a report to return to the live dashboard.
 - **Live duration** — elapsed time updates every second
 - **Activity indicator** — `● ACTIVE` / `● WORKING` / `○ IDLE 30s` based on transcript staleness
 - **Token breakdown bar** — visual bar showing input/cache/output proportions with percentages
-- **Current vs Session** — split activity view: current phase (since last compaction) and full session totals
+- **Current vs Session** — split activity view: current turn (this question/answer) and full session totals
 - **Mini event log** — last 8 timestamped events: tool calls, errors, compactions
 - **Full log viewer** — `l` opens scrollable log with `f` to filter (all/errors/bash/edits/search/compactions) and `a` for live auto-scroll
 - **Green pulse** — separator flashes bright green when new data arrives
