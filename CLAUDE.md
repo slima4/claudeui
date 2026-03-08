@@ -32,6 +32,15 @@ Session browser and manager. Single-file script.
 - Subcommands: `list`, `show`, `resume`, `diff`, `export`
 - Reads from `~/.claude/projects/` directory structure
 
+### claude-code-hooks
+
+Claude Code hooks for automatic in-session context. Three hook scripts:
+
+- `claude-code-hooks/session-heatmap.py` — SessionStart: shows file activity hotspots
+- `claude-code-hooks/post-edit-deps.py` — PostToolUse (Edit|Write): shows reverse dependencies
+- `claude-code-hooks/pre-edit-churn.py` — PreToolUse (Edit|Write): warns about high-churn files
+- Configured via `hooks` in `~/.claude/settings.json`
+
 ## Conventions
 
 - Each tool is self-contained in its own directory with a README.md

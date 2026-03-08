@@ -84,6 +84,39 @@ python3 session-manager.py diff a1b2c3d4 13a4b5c6
   Cost difference      +$43.49
 ```
 
+### [claude-code-hooks](./claude-code-hooks/)
+
+[Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) that provide automatic context about file activity, dependencies, and code churn — right inside Claude Code sessions.
+
+**Session start** — file activity heatmap:
+
+```
+📊 File hotspots (last 14 days, 8 sessions):
+  ███ src/config.ts (43e/12r)
+  ▆▆▆ src/pages/dashboard/index.vue (39e/8r)
+  ▅▅▅ src/locales/en.json (21e/15r)
+  ▄▄▄ src/utils/constants.ts (19e/5r)
+```
+
+**After editing** — reverse dependency check:
+
+```
+⚠️ 4 file(s) depend on validation.ts:
+  → app/composables/useAuth.ts
+  → app/composables/useNotifications.ts
+  → app/components/ui/ChangePasswordForm.vue
+  → app/pages/reset-password.vue
+Consider checking these files for compatibility.
+```
+
+**Before editing** — high churn warning:
+
+```
+🔥 High churn: config.ts has been edited 43 times across 5 sessions
+in the last 14 days. Consider if this file needs refactoring rather
+than more patches.
+```
+
 ## License
 
 MIT
