@@ -132,6 +132,7 @@ def parse_transcript(transcript_path):
         return result
 
     # Reverse pass — find most recent context usage
+    # Stop at summary (compaction) entries: pre-compact usage is stale
     context_found = False
     for line in reversed(lines):
         line = line.strip()
@@ -141,6 +142,14 @@ def parse_transcript(transcript_path):
             obj = json.loads(line)
         except json.JSONDecodeError:
             continue
+
+        # If we hit a compaction before finding usage, context was reset
+        if (
+            obj.get("type") == "summary"
+            or (obj.get("type") == "system"
+                and obj.get("subtype") == "compact_boundary")
+        ):
+            break
 
         if (
             not context_found
@@ -189,7 +198,10 @@ def parse_transcript(transcript_path):
             result["output_tokens_total"] += usage.get("output_tokens", 0)
 
         # Compact count
-        if obj.get("type") == "summary":
+        if obj.get("type") == "summary" or (
+            obj.get("type") == "system"
+            and obj.get("subtype") == "compact_boundary"
+        ):
             result["compact_count"] += 1
 
         # Tool calls, errors, files, and subagents from assistant messages
