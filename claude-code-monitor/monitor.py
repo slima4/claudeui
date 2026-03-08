@@ -8,14 +8,16 @@ Usage:
 
 Hotkeys:
     s  session stats        d  session details
-    l  list sessions        e  export session
-    ?  help overlay         q  quit
+    l  event log            e  export session
+    o  list sessions        ?  help overlay
+    q  quit
 """
 
 import json
 import os
 import select
 import shutil
+import textwrap
 import subprocess
 import sys
 import termios
@@ -201,8 +203,8 @@ def parse_transcript(path):
                             "turn": current_turn,
                             "error": r["last_error_msg"],
                         })
-                        err_short = r["last_error_msg"][:60] if r["last_error_msg"] else "unknown"
-                        r["event_log"].append((ts, f"error: {err_short}"))
+                        err_msg = r["last_error_msg"] if r["last_error_msg"] else "unknown"
+                        r["event_log"].append((ts, f"error: {err_msg}"))
 
         # Assistant responses
         if etype == "assistant" and "message" in obj:
@@ -247,8 +249,6 @@ def parse_transcript(path):
                                     trace_entry = f"{name.lower()} {cmd_short}"
                                     # Full command for event log (clean up multiline)
                                     cmd_clean = cmd.replace("\n", " ").strip()
-                                    if len(cmd_clean) > 120:
-                                        cmd_clean = cmd_clean[:117] + "..."
                                     r["event_log"].append((ts, f"$ {cmd_clean}"))
                                 else:
                                     query = inp.get("pattern", inp.get("query", inp.get("prompt", "")))
@@ -301,7 +301,8 @@ def parse_transcript(path):
     r["subagent_count"] = len(subagents)
     r["last_context"] = last_context
     r["recent_tools"] = r["recent_tools"][-5:]
-    r["event_log"] = r["event_log"][-8:]
+    r["full_log"] = list(r["event_log"])  # full log for viewer
+    r["event_log"] = r["event_log"][-8:]  # truncated for dashboard
     return r
 
 
@@ -650,27 +651,32 @@ def render_dashboard(r, idle_secs, just_updated, term_width):
         lines.append("")
         lines.append(f"  {BOLD}{DIM}LOG{RESET}")
         max_desc = w - 14  # 2 indent + 10 timestamp + 2 gap
+        indent = " " * 14  # align continuation with description start
         for evt_ts, evt_desc in r["event_log"]:
             t = format_event_time(evt_ts) if evt_ts else "??:??:??"
-            desc = evt_desc[:max_desc] if len(evt_desc) > max_desc else evt_desc
             # Color events by type
-            if desc.startswith("error:"):
+            if evt_desc.startswith("error:"):
                 evt_color = RED
-            elif desc.startswith("⚡"):
+            elif evt_desc.startswith("⚡"):
                 evt_color = YELLOW
-            elif desc.startswith("$"):
+            elif evt_desc.startswith("$"):
                 evt_color = CYAN
-            elif "edit" in desc or "write" in desc:
+            elif "edit" in evt_desc or "write" in evt_desc:
                 evt_color = GREEN
-            elif desc.startswith("grep:") or desc.startswith("glob:"):
+            elif evt_desc.startswith("grep:") or evt_desc.startswith("glob:"):
                 evt_color = MAGENTA
             else:
                 evt_color = GRAY
-            lines.append(f"  {DIM}{t}{RESET}  {evt_color}{desc}{RESET}")
+            wrapped = textwrap.wrap(evt_desc, width=max_desc, break_long_words=True, break_on_hyphens=False)
+            if not wrapped:
+                wrapped = [evt_desc]
+            lines.append(f"  {DIM}{t}{RESET}  {evt_color}{wrapped[0]}{RESET}")
+            for cont in wrapped[1:]:
+                lines.append(f"  {indent}{evt_color}{cont}{RESET}")
 
     lines.append("")
     lines.append(f"  {sep_color}{'─' * w}{RESET}")
-    lines.append(f"  {DIM}[s]{RESET} stats  {DIM}[d]{RESET} details  {DIM}[l]{RESET} sessions  {DIM}[e]{RESET} export  {DIM}[?]{RESET} help  {DIM}[q]{RESET} quit")
+    lines.append(f"  {DIM}[s]{RESET} stats  {DIM}[d]{RESET} details  {DIM}[l]{RESET} log  {DIM}[e]{RESET} export  {DIM}[o]{RESET} sessions  {DIM}[?]{RESET} help  {DIM}[q]{RESET} quit")
 
     return lines
 
@@ -687,8 +693,9 @@ def render_help_overlay(term_width):
     shortcuts = [
         ("s", "Session stats — full cost breakdown, token sparkline, tool usage"),
         ("d", "Session details — detailed session view from session-manager"),
-        ("l", "List sessions — browse all recent sessions"),
+        ("l", "Event log — scrollable, f to filter, a for live auto-scroll"),
         ("e", "Export session — save session as markdown"),
+        ("o", "List sessions — browse all recent sessions"),
         ("?", "Toggle this help overlay"),
         ("q", "Quit the monitor"),
     ]
@@ -715,6 +722,197 @@ def render_help_overlay(term_width):
     lines.append(f"  {BOLD}{'─' * w}{RESET}")
     lines.append(f"  {DIM}Press any key to close{RESET}")
     return lines
+
+
+FILTER_NAMES = ["all", "errors", "bash", "edits", "search", "compactions"]
+
+FILTER_MATCHERS = {
+    "all": lambda d: True,
+    "errors": lambda d: d.startswith("error:"),
+    "bash": lambda d: d.startswith("$"),
+    "edits": lambda d: any(w in d for w in ("edit ", "write ")),
+    "search": lambda d: any(d.startswith(p) for p in ("grep:", "glob:", "read ")),
+    "compactions": lambda d: d.startswith("⚡"),
+}
+
+
+def _build_log_lines(raw_log, max_desc, filter_name="all"):
+    """Build formatted display lines from raw event log."""
+    indent = " " * 14
+    matcher = FILTER_MATCHERS.get(filter_name, FILTER_MATCHERS["all"])
+    lines = []
+    event_count = 0
+    for evt_ts, evt_desc in raw_log:
+        if not matcher(evt_desc):
+            continue
+        event_count += 1
+        t = format_event_time(evt_ts) if evt_ts else "??:??:??"
+        if evt_desc.startswith("error:"):
+            evt_color = RED
+        elif evt_desc.startswith("⚡"):
+            evt_color = YELLOW
+        elif evt_desc.startswith("$"):
+            evt_color = CYAN
+        elif "edit" in evt_desc or "write" in evt_desc:
+            evt_color = GREEN
+        elif evt_desc.startswith("grep:") or evt_desc.startswith("glob:"):
+            evt_color = MAGENTA
+        else:
+            evt_color = GRAY
+        wrapped = textwrap.wrap(evt_desc, width=max_desc, break_long_words=True, break_on_hyphens=False)
+        if not wrapped:
+            wrapped = [evt_desc]
+        lines.append(f"  {DIM}{t}{RESET}  {evt_color}{wrapped[0]}{RESET}")
+        for cont in wrapped[1:]:
+            lines.append(f"  {indent}{evt_color}{cont}{RESET}")
+    return lines, event_count
+
+
+def show_log_viewer(transcript_path, term_width):
+    """Interactive log viewer with filtering and auto-scroll."""
+    out = sys.stdout
+    w = min(term_width - 4, 100)
+    max_desc = w - 14
+
+    filter_idx = 0  # index into FILTER_NAMES
+    auto_follow = True
+    last_mtime = 0
+    raw_log = []
+    log_lines = []
+    event_count = 0
+    total = 0
+    scroll_pos = 0
+    needs_rebuild = True
+    needs_redraw = True
+
+    while True:
+        # Reload transcript if file changed or first run
+        try:
+            mtime = os.stat(transcript_path).st_mtime
+        except FileNotFoundError:
+            mtime = last_mtime
+        if mtime != last_mtime:
+            last_mtime = mtime
+            r = parse_transcript(transcript_path)
+            raw_log = r.get("full_log", [])
+            needs_rebuild = True
+
+        if needs_rebuild:
+            filter_name = FILTER_NAMES[filter_idx]
+            log_lines, event_count = _build_log_lines(raw_log, max_desc, filter_name)
+            total = len(log_lines)
+            term_h = shutil.get_terminal_size().lines
+            page_size = max(1, term_h - 5)
+            max_scroll = max(0, total - page_size)
+            if auto_follow:
+                scroll_pos = max_scroll
+            else:
+                scroll_pos = min(scroll_pos, max_scroll)
+            needs_rebuild = False
+            needs_redraw = True
+
+        # Render only when needed
+        if needs_redraw:
+            visible = log_lines[scroll_pos:scroll_pos + page_size]
+            filter_name = FILTER_NAMES[filter_idx]
+            filter_label = f"  filter: {BOLD}{filter_name}{RESET}" if filter_name != "all" else ""
+            follow_label = f"  {GREEN}● LIVE{RESET}" if auto_follow else ""
+            header = f"  {BOLD}LOG{RESET}  {DIM}({event_count} events){RESET}{filter_label}{follow_label}"
+            pos_info = f"{scroll_pos + 1}-{min(scroll_pos + page_size, total)}/{total}" if total > 0 else "0/0"
+            footer = f"  {DIM}j/k ↑/↓  ^D/^U  ^F/^B  g/G  f filter  a live  q close{RESET}  {DIM}{pos_info}{RESET}"
+
+            buf = CLEAR + header + "\n"
+            buf += f"  {'─' * w}\n"
+            buf += "\n".join(visible) + "\n"
+            pad = page_size - len(visible)
+            if pad > 0:
+                buf += "\n" * pad
+            buf += f"  {'─' * w}\n"
+            buf += footer
+            out.write(buf)
+            out.flush()
+            needs_redraw = False
+
+        # Wait for key or auto-refresh (1s when following, blocking when not)
+        timeout = 1.0 if auto_follow else 60.0
+        deadline = time.time() + timeout
+        got_key = False
+        while time.time() < deadline:
+            wait = max(0.01, deadline - time.time())
+            if select.select([sys.stdin], [], [], wait)[0]:
+                raw = os.read(sys.stdin.fileno(), 8).decode("utf-8", errors="ignore")
+                if raw in ("q", "Q", "\x1b"):
+                    return
+                elif raw in ("\x1b[A", "k", "K"):  # up
+                    scroll_pos = max(0, scroll_pos - 1)
+                    auto_follow = False
+                    got_key = True
+                    break
+                elif raw in ("\x1b[B", "j", "J"):  # down
+                    scroll_pos = min(max(0, total - page_size), scroll_pos + 1)
+                    if scroll_pos >= max(0, total - page_size):
+                        auto_follow = True
+                    got_key = True
+                    break
+                elif raw in ("\x1b[5~", "\x02"):  # page up / Ctrl+B
+                    scroll_pos = max(0, scroll_pos - page_size)
+                    auto_follow = False
+                    got_key = True
+                    break
+                elif raw in ("\x1b[6~", "\x06"):  # page down / Ctrl+F
+                    scroll_pos = min(max(0, total - page_size), scroll_pos + page_size)
+                    if scroll_pos >= max(0, total - page_size):
+                        auto_follow = True
+                    got_key = True
+                    break
+                elif raw == "\x04":  # Ctrl+D — half page down
+                    scroll_pos = min(max(0, total - page_size), scroll_pos + page_size // 2)
+                    if scroll_pos >= max(0, total - page_size):
+                        auto_follow = True
+                    got_key = True
+                    break
+                elif raw == "\x15":  # Ctrl+U — half page up
+                    scroll_pos = max(0, scroll_pos - page_size // 2)
+                    auto_follow = False
+                    got_key = True
+                    break
+                elif raw == "g":  # top
+                    scroll_pos = 0
+                    auto_follow = False
+                    got_key = True
+                    break
+                elif raw == "G":  # bottom
+                    scroll_pos = max(0, total - page_size)
+                    auto_follow = True
+                    got_key = True
+                    break
+                elif raw in ("f", "F"):  # cycle filter
+                    filter_idx = (filter_idx + 1) % len(FILTER_NAMES)
+                    needs_rebuild = True
+                    got_key = True
+                    break
+                elif raw in ("a", "A"):  # toggle auto-follow
+                    auto_follow = not auto_follow
+                    if auto_follow:
+                        scroll_pos = max(0, total - page_size)
+                    got_key = True
+                    break
+            else:
+                # No input — if auto-follow, check for file changes
+                if auto_follow:
+                    try:
+                        new_mtime = os.stat(transcript_path).st_mtime
+                    except FileNotFoundError:
+                        new_mtime = last_mtime
+                    if new_mtime != last_mtime:
+                        needs_rebuild = True
+                        break
+        if got_key:
+            needs_redraw = True
+        elif not needs_rebuild:
+            # Auto-follow timeout — check for new data
+            if auto_follow:
+                needs_rebuild = True
 
 
 # ── Session management ──────────────────────────────────────────────
@@ -765,7 +963,7 @@ def find_session_by_id(session_id):
 
 # ── Input handling ──────────────────────────────────────────────────
 
-VALID_KEYS = frozenset("qQsSdDlLeE?")
+VALID_KEYS = frozenset("qQsSdDlLeEoO?")
 
 
 def get_key():
@@ -923,15 +1121,19 @@ def main():
                             needs_full_redraw = True
                             cached_body = None
                     elif key in ("l", "L"):
+                        if r and r.get("full_log"):
+                            show_log_viewer(path, term_width)
+                            needs_full_redraw = True
+                    elif key in ("e", "E"):
+                        export_session(path, session_id)
+                        needs_full_redraw = True
+                        cached_body = None
+                    elif key in ("o", "O"):
                         script = find_tool_script("manager")
                         if os.path.exists(script):
                             run_tool(script, ["list"])
                             needs_full_redraw = True
                             cached_body = None
-                    elif key in ("e", "E"):
-                        export_session(path, session_id)
-                        needs_full_redraw = True
-                        cached_body = None
 
                 # Re-parse transcript only when file changes
                 try:

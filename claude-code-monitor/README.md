@@ -37,7 +37,7 @@ A standalone terminal dashboard that monitors your active Claude Code session in
   14:32:15  error: File not found
 
   ────────────────────────────────────────────────────────────
-  [s] stats  [d] details  [l] sessions  [e] export  [?] help  [q] quit
+  [s] stats  [d] details  [l] log  [e] export  [o] sessions  [?] help  [q] quit
 ```
 
 ## Usage
@@ -61,8 +61,9 @@ Run it in a separate terminal while Claude Code is working.
 |-----|--------|
 | `s` | Run **session-stats** — full cost breakdown, token sparkline, tool usage |
 | `d` | Run **session-manager show** — detailed session view |
-| `l` | Run **session-manager list** — browse all recent sessions |
+| `l` | **Event log** — scrollable log with filtering and live auto-scroll |
 | `e` | **Export** session as markdown file |
+| `o` | Run **session-manager list** — browse all recent sessions |
 | `?` | Toggle **help overlay** with all features and shortcuts |
 | `q` | Quit the monitor |
 
@@ -77,6 +78,7 @@ Press any key after viewing a report to return to the live dashboard.
 - **Token breakdown bar** — visual bar showing input/cache/output proportions with percentages
 - **Current vs Session** — split activity view: current phase (since last compaction) and full session totals
 - **Mini event log** — last 8 timestamped events: tool calls, errors, compactions
+- **Full log viewer** — `l` opens scrollable log with `f` to filter (all/errors/bash/edits/search/compactions) and `a` for live auto-scroll
 - **Green pulse** — separator flashes bright green when new data arrives
 - **Compaction alert** — `⚡ JUST COMPACTED` highlight after compaction events
 - **Cost burn rate** — `$/min` alongside per-turn average cost

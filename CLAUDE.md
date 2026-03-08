@@ -53,8 +53,10 @@ Live session dashboard for a separate terminal. Single-file script.
 
 - Entry point: `claude-code-monitor/monitor.py`
 - Self-contained — all parsing inlined, no imports from other tools
-- Watches transcript file for changes, refreshes every 2 seconds
+- Watches transcript file for changes, refreshes on file change
 - Args: none (auto-detect), `<session-id>`, or `--list`
+- Hotkeys: `s` stats, `d` details, `l` log viewer, `e` export, `o` sessions, `?` help
+- Log viewer: `f` cycles filter (all/errors/bash/edits/search/compactions), `a` toggles live auto-scroll
 
 ### claude-code-hooks
 

@@ -133,7 +133,7 @@ Live session dashboard for a separate terminal. Live duration, activity status, 
 ```bash
 python3 claude-code-monitor/monitor.py           # auto-detect active session
 python3 claude-code-monitor/monitor.py --list     # list recent sessions
-# While running: [s] stats  [d] details  [l] sessions  [e] export  [?] help  [q] quit
+# While running: [s] stats  [d] details  [l] log  [e] export  [o] sessions  [?] help  [q] quit
 ```
 
 ### [claude-code-hooks](./claude-code-hooks/)
