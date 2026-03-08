@@ -151,6 +151,8 @@ def parse_transcript(transcript_path):
         "context_history": [],
         "recent_tools": [],
         "current_turn_file_edits": {},
+        "turns_since_compact": 0,
+        "context_at_last_compact": 0,
     }
 
     try:
@@ -227,6 +229,7 @@ def parse_transcript(transcript_path):
                 has_text = True
             if has_text:
                 result["turn_count"] += 1
+                result["turns_since_compact"] += 1
                 result["recent_tools"] = []
                 result["current_turn_file_edits"] = {}
 
@@ -262,6 +265,8 @@ def parse_transcript(transcript_path):
         ):
             result["compact_count"] += 1
             result["context_history"].append(None)
+            result["turns_since_compact"] = 0
+            result["context_at_last_compact"] = 0
 
         # Tool calls, thinking, errors, files, and subagents
         if obj.get("type") == "assistant" and "message" in obj:
@@ -537,13 +542,37 @@ def main():
         metrics["context_history"], max_context=CONTEXT_LIMIT
     )
 
+    # Compaction prediction (turns remaining)
+    compact_prediction = ""
+    turns_since = metrics["turns_since_compact"]
+    if turns_since >= 2 and ratio > 0 and ratio < 1.0:
+        # Average context growth per turn since last compaction
+        growth_per_turn = estimated_total / max(turns_since, 1)
+        remaining_tokens = CONTEXT_LIMIT - estimated_total
+        if growth_per_turn > 0:
+            turns_left = int(remaining_tokens / growth_per_turn)
+            if turns_left <= 5:
+                pred_color = RED
+            elif turns_left <= 15:
+                pred_color = ORANGE
+            elif turns_left <= 30:
+                pred_color = YELLOW
+            else:
+                pred_color = GREEN
+            compact_prediction = (
+                f"{pred_color}~{turns_left}{RESET} {GRAY}turns left{RESET}"
+            )
+
     dim = GRAY
     sep = f" {dim}│{RESET} "
 
     # Line 1: session core
+    ctx_part = f"{bar} {CYAN}{tokens_str}{RESET}{dim}/{RESET}{GRAY}{limit_str}{RESET}"
+    if compact_prediction:
+        ctx_part += f" {dim}│{RESET} {compact_prediction}"
     line1_parts = [
         f"{BOLD}{MAGENTA}{model}{RESET}",
-        f"{bar} {CYAN}{tokens_str}{RESET}{dim}/{RESET}{GRAY}{limit_str}{RESET}",
+        ctx_part,
     ]
     if sparkline_part:
         line1_parts.append(sparkline_part)
