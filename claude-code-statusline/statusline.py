@@ -126,6 +126,8 @@ def parse_transcript(transcript_path):
         "turn_count": 0,
         "thinking_count": 0,
         "context_history": [],
+        "recent_tools": [],
+        "current_turn_file_edits": {},
     }
 
     try:
@@ -188,16 +190,22 @@ def parse_transcript(transcript_path):
             result["session_start"] = obj["timestamp"]
 
         # Turn count (each user message = one turn)
+        # Reset current turn event counter on new user message
         if obj.get("type") == "user" and "message" in obj:
             content = obj["message"].get("content", [])
             # Only count turns with actual user text, not just tool results
+            has_text = False
             if isinstance(content, list):
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "text":
-                        result["turn_count"] += 1
+                        has_text = True
                         break
             elif isinstance(content, str) and content.strip():
+                has_text = True
+            if has_text:
                 result["turn_count"] += 1
+                result["recent_tools"] = []
+                result["current_turn_file_edits"] = {}
 
         # Token usage for cost + context history
         if (
@@ -247,10 +255,39 @@ def parse_transcript(transcript_path):
                         inp = block.get("input", {})
                         tool_name = block.get("name", "")
 
+                        # Recent tool activity (for line 3)
+                        file_arg = ""
+                        for key in ("file_path", "path"):
+                            if key in inp and isinstance(inp[key], str):
+                                file_arg = os.path.basename(inp[key])
+                                break
+                        if file_arg:
+                            result["recent_tools"].append(
+                                f"{tool_name} {file_arg}"
+                            )
+                        else:
+                            cmd = inp.get("command", "")
+                            if cmd:
+                                # Show first word of command
+                                short = cmd.split()[0] if cmd.split() else ""
+                                result["recent_tools"].append(
+                                    f"{tool_name} {short}"
+                                )
+                            else:
+                                result["recent_tools"].append(tool_name)
+
                         # Files touched
                         for key in ("file_path", "path"):
                             if key in inp and isinstance(inp[key], str):
                                 result["files_touched"].add(inp[key])
+                                # Track edits per file this turn
+                                if tool_name in ("Edit", "Write",
+                                                  "MultiEdit"):
+                                    fname = os.path.basename(inp[key])
+                                    result["current_turn_file_edits"][fname] = (
+                                        result["current_turn_file_edits"]
+                                        .get(fname, 0) + 1
+                                    )
 
                         # Sub-agent tracking
                         if tool_name in ("Task", "Agent"):
@@ -332,6 +369,7 @@ def build_sparkline(values, width=20):
         idx = int(v / max_val * (len(blocks) - 1))
         chars.append(blocks[idx])
     return "".join(chars)
+
 
 
 def build_progress_bar(ratio, length=20):
@@ -448,41 +486,70 @@ def main():
             spark_color = RED
         sparkline_part = f"{spark_color}{sparkline}{RESET}"
 
-    # Line 1: session essentials
+    dim = GRAY
+    sep = f" {dim}│{RESET} "
+
+    # Line 1: session core
     line1_parts = [
         f"{BOLD}{MAGENTA}{model}{RESET}",
-        f"{bar} {CYAN}{tokens_str}{RESET}/{GRAY}{limit_str}{RESET}",
+        f"{bar} {CYAN}{tokens_str}{RESET}{dim}/{RESET}{GRAY}{limit_str}{RESET}",
     ]
     if sparkline_part:
         line1_parts.append(sparkline_part)
     line1_parts.extend([
         f"{YELLOW}{cost_str}{RESET}",
         f"{WHITE}{duration_str}{RESET}",
-        f"{CYAN}{metrics['compact_count']}{RESET}x compact",
-        f"{GRAY}{session_id}{RESET}",
+        f"{CYAN}{metrics['compact_count']}{RESET}{dim}x{RESET}compact",
+        f"{dim}#{RESET}{GRAY}{session_id}{RESET}",
     ])
 
-    # Line 2: project context
-    line2_parts = [f"{WHITE}{cwd}{RESET}"]
+    # Line 2: project telemetry
+    line2_parts = [f"{GREEN}{cwd}{RESET}"]
     if branch_part:
         line2_parts.append(branch_part)
     line2_parts.extend([
-        f"{CYAN}{metrics['turn_count']}{RESET} turns",
-        f"{CYAN}{len(metrics['files_touched'])}{RESET} files",
-        error_part,
-        cache_part,
+        f"{dim}t:{RESET}{CYAN}{metrics['turn_count']}{RESET}",
+        f"{dim}f:{RESET}{CYAN}{len(metrics['files_touched'])}{RESET}",
+        f"{dim}err:{RESET}{error_part.split(' ')[0]}",
+        f"{dim}cache:{RESET}{cache_part.split(' ')[0]}",
     ])
     if metrics["thinking_count"] > 0:
         line2_parts.append(
-            f"{MAGENTA}{metrics['thinking_count']}{RESET}x think"
+            f"{dim}think:{RESET}{MAGENTA}{metrics['thinking_count']}{RESET}"
         )
     if cost_per_turn:
         line2_parts.append(cost_per_turn)
     if subagent_part:
-        line2_parts.append(subagent_part)
+        line2_parts.append(
+            f"{dim}agents:{RESET}{CYAN}{metrics['subagent_count']}{RESET}"
+        )
+
+    # Line 3: live activity trace
+    line3 = ""
+    recent = metrics["recent_tools"]
+    file_edits = metrics["current_turn_file_edits"]
+    if recent or file_edits:
+        parts3 = []
+        if recent:
+            trail = []
+            for t in recent[-6:]:
+                p = t.split()
+                if len(p) >= 2:
+                    trail.append(f"{dim}{p[0][0].lower()}»{RESET}{GREEN}{p[-1]}{RESET}")
+                else:
+                    trail.append(f"{GREEN}{p[0]}{RESET}")
+            parts3.append(f"{dim}>{RESET}".join(trail))
+        if file_edits:
+            top = sorted(file_edits.items(), key=lambda x: -x[1])[:3]
+            parts3.append(" ".join(
+                f"{YELLOW}{n}{RESET}{dim}×{c}{RESET}" for n, c in top
+            ))
+        line3 = f" {sep.join(parts3)}"
 
     print(f" {sep.join(line1_parts)}")
     print(f" {sep.join(line2_parts)}")
+    if line3:
+        print(line3)
 
 
 if __name__ == "__main__":

@@ -6,11 +6,12 @@ A collection of utilities and scripts for working with AI coding assistants.
 
 ### [claude-code-statusline](./claude-code-statusline/)
 
-Real-time two-line status bar for Claude Code showing context usage with sparkline, session cost, cache ratio, turn count, duration, compaction count, file count, git diff stats, and tool error rate.
+Real-time status bar for Claude Code with context sparkline, session cost, cache ratio, thinking count, live tool trace, and file edit tracking.
 
 ```
- Opus 4.6 | ████████░░░░░░░░░░░░ 42% 65.5k/200.0k | ▁▂▃▄▅▆▇█▃▄▅ | $2.34 | 12m | 0x compact | a1b2c3d4
- ai-toolbox | main +42 -17 | 18 turns | 5 files | 0 err | 82% cache | ~$0.13/turn
+ Opus 4.6 │ ████████░░░░░░░░░░░░ 42% 65.5k/200.0k │ ▁▂▃▅▆▇█▃▄▅ │ $2.34 │ 12m │ 0x compact │ #a1b2c3d4
+ ai-toolbox │ main +42 -17 │ t:18 │ f:5 │ err:0 │ cache:82% │ think:4 │ ~$0.13/turn
+ r»statusline.py>e»statusline.py>b»python3>e»README.md │ statusline.py×3 README.md×1
 ```
 
 ### [claude-code-session-stats](./claude-code-session-stats/)

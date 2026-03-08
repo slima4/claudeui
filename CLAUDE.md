@@ -10,13 +10,14 @@ AI Toolbox is a collection of standalone utilities for AI coding assistants. Eac
 
 ### claude-code-statusline
 
-Real-time two-line status bar for Claude Code. Single-file script.
+Real-time status bar for Claude Code. Single-file script.
 
 - Entry point: `claude-code-statusline/statusline.py`
 - Reads session JSON from stdin (provided by Claude Code's `statusLine` feature)
-- Parses the transcript JSONL file for token usage, compaction events, tool calls, errors, turns, and cache ratio
-- Two-line layout: line 1 (session essentials + context sparkline), line 2 (project context)
+- Parses the transcript JSONL file for token usage, compaction events, tool calls, errors, turns, cache ratio, and thinking blocks
+- Three-line layout: line 1 (session core + sparkline), line 2 (project telemetry), line 3 (live tool trace + file edits)
 - Compaction entries use `{"type": "system", "subtype": "compact_boundary"}` in transcript JSONL
+- Thinking blocks use `{"type": "thinking"}` in assistant message content (token counts redacted)
 
 ### claude-code-session-stats
 

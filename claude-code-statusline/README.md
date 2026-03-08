@@ -3,14 +3,16 @@
 A lightweight Python script that adds a real-time context window usage indicator to [Claude Code](https://docs.anthropic.com/en/docs/claude-code)'s status line.
 
 ```
- Opus 4.6 | ████████░░░░░░░░░░░░ 42% 65.5k/200.0k | ▁▂▃▄▅▆▇█▃▄▅ | $2.34 | 12m | 0x compact | a1b2c3d4
- ai-toolbox | main +42 -17 | 18 turns | 5 files | 0 err | 82% cache | ~$0.13/turn
+ Opus 4.6 │ ████████░░░░░░░░░░░░ 42% 65.5k/200.0k │ ▁▂▃▅▆▇█▃▄▅ │ $2.34 │ 12m │ 0x compact │ #a1b2c3d4
+ ai-toolbox │ main +42 -17 │ t:18 │ f:5 │ err:0 │ cache:82% │ think:4 │ ~$0.13/turn │ agents:1
+ r»statusline.py>e»statusline.py>b»python3>e»README.md │ statusline.py×3 README.md×1
 ```
 
-Two-line layout:
+Three-line layout:
 
-- **Line 1** — session essentials: model, context bar, sparkline, cost, duration, compactions, session ID
-- **Line 2** — project context: directory, git branch + diff, turns, files, errors, cache ratio, cost/turn, agents
+- **Line 1** — session core: model, context bar, sparkline, cost, duration, compactions, session ID
+- **Line 2** — project telemetry: directory, git branch + diff, turns, files, errors, cache ratio, thinking count, cost/turn, agents
+- **Line 3** — live activity trace: recent tool calls (`r»read`, `e»edit`, `b»bash`) and file edit counts (shown only during active turns)
 
 ## Features
 
@@ -21,11 +23,13 @@ Two-line layout:
 - **Session duration** — how long since the first message
 - **Compact count** — how many times auto-compaction has fired
 - **Turn count** — number of user messages in the session
+- **Thinking count** — how many responses used extended thinking
 - **Working files** — number of unique files Claude has read or edited
 - **Cache hit ratio** — percentage of input tokens served from cache (green ≥70%, yellow ≥40%, orange <40%)
 - **Git diff stats** — `+lines -lines` changed in the working tree
 - **Tool errors** — count of failed tool calls this session
 - **Sub-agent count** — number of spawned sub-agents (shown when > 0)
+- **Live activity trace** — last 6 tool calls with file targets, plus edit counts per file this turn
 - **Model name**, **git branch**, and **session ID**
 
 ## Why?
@@ -85,7 +89,7 @@ Claude Code passes session metadata as JSON via stdin to status line commands. T
    - **Reverse pass**: finds the most recent `usage` block for current context size
    - **Forward pass**: accumulates total tokens for cost, counts compactions, and collects touched file paths
 3. Calculates cost using per-model pricing (Opus, Sonnet, Haiku)
-4. Renders everything into a two-line colored status bar
+4. Renders a three-line status bar with live activity trace
 
 ## Supported models
 
