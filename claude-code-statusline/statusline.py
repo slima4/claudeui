@@ -124,6 +124,7 @@ def parse_transcript(transcript_path):
         "tool_errors": 0,
         "subagent_count": 0,
         "turn_count": 0,
+        "context_history": [],
     }
 
     try:
@@ -197,7 +198,7 @@ def parse_transcript(transcript_path):
             elif isinstance(content, str) and content.strip():
                 result["turn_count"] += 1
 
-        # Token usage for cost
+        # Token usage for cost + context history
         if (
             obj.get("type") == "assistant"
             and "message" in obj
@@ -210,12 +211,25 @@ def parse_transcript(transcript_path):
             )
             result["output_tokens_total"] += usage.get("output_tokens", 0)
 
-        # Compact count
+            # Context snapshot for sparkline
+            ctx_keys = [
+                "input_tokens",
+                "cache_creation_input_tokens",
+                "cache_read_input_tokens",
+                "output_tokens",
+            ]
+            if all(k in usage for k in ctx_keys):
+                result["context_history"].append(
+                    sum(usage[k] for k in ctx_keys)
+                )
+
+        # Compact count — also record a 0 in context history (visual cliff)
         if obj.get("type") == "summary" or (
             obj.get("type") == "system"
             and obj.get("subtype") == "compact_boundary"
         ):
             result["compact_count"] += 1
+            result["context_history"].append(0)
 
         # Tool calls, errors, files, and subagents from assistant messages
         if obj.get("type") == "assistant" and "message" in obj:
@@ -290,6 +304,28 @@ def format_duration(start_timestamp):
         return f"{hours}h {minutes:02d}m"
     except Exception:
         return "?m"
+
+
+def build_sparkline(values, width=20):
+    """Build a sparkline string from a list of values."""
+    if not values:
+        return ""
+    # Downsample if too many points
+    if len(values) > width:
+        step = len(values) / width
+        sampled = []
+        for i in range(width):
+            idx = int(i * step)
+            sampled.append(values[idx])
+        values = sampled
+
+    blocks = "▁▂▃▄▅▆▇█"
+    max_val = max(values) if max(values) > 0 else 1
+    chars = []
+    for v in values:
+        idx = int(v / max_val * (len(blocks) - 1))
+        chars.append(blocks[idx])
+    return "".join(chars)
 
 
 def build_progress_bar(ratio, length=20):
@@ -391,15 +427,34 @@ def main():
 
     sep = f" {GRAY}|{RESET} "
 
+    # Context sparkline
+    sparkline = build_sparkline(metrics["context_history"])
+    sparkline_part = ""
+    if sparkline:
+        # Color the sparkline based on current ratio
+        if ratio < 0.50:
+            spark_color = GREEN
+        elif ratio < 0.75:
+            spark_color = YELLOW
+        elif ratio < 0.90:
+            spark_color = ORANGE
+        else:
+            spark_color = RED
+        sparkline_part = f"{spark_color}{sparkline}{RESET}"
+
     # Line 1: session essentials
     line1_parts = [
         f"{BOLD}{MAGENTA}{model}{RESET}",
         f"{bar} {CYAN}{tokens_str}{RESET}/{GRAY}{limit_str}{RESET}",
+    ]
+    if sparkline_part:
+        line1_parts.append(sparkline_part)
+    line1_parts.extend([
         f"{YELLOW}{cost_str}{RESET}",
         f"{WHITE}{duration_str}{RESET}",
         f"{CYAN}{metrics['compact_count']}{RESET}x compact",
         f"{GRAY}{session_id}{RESET}",
-    ]
+    ])
 
     # Line 2: project context
     line2_parts = [f"{WHITE}{cwd}{RESET}"]
