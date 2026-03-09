@@ -447,7 +447,24 @@ def cmd_export(args):
     output.append("---")
     output.append("")
 
+    compact_num = 0
     for entry in entries:
+        # Mark compaction boundaries
+        if (entry.get("type") == "system"
+                and entry.get("subtype") == "compact_boundary"):
+            compact_num += 1
+            ts = entry.get("timestamp", "")
+            time_str = format_time(ts) if ts else ""
+            meta_c = entry.get("compactMetadata", {})
+            trigger = meta_c.get("trigger", "?")
+            pre_tokens = meta_c.get("preTokens", 0)
+            output.append(f"---")
+            output.append("")
+            output.append(f"**⚡ Compaction #{compact_num}** ({time_str}) — {trigger}, {pre_tokens:,} tokens before")
+            output.append("")
+            output.append(f"---")
+            output.append("")
+            continue
         if entry.get("type") not in ("user", "assistant"):
             continue
         if entry.get("isMeta"):

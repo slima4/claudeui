@@ -72,6 +72,18 @@ python3 session-manager.py export abc12345 > session.md
 
 Markdown export includes all user/assistant messages and tool calls. JSON export includes raw conversation entries.
 
+Compaction boundaries are marked in the export:
+
+```
+---
+
+**⚡ Compaction #1** (2026-03-08 06:48) — manual, 165,703 tokens before
+
+---
+```
+
+Search for `⚡ Compaction` to find where Claude compressed the conversation. Everything above the marker was condensed into a summary for the next segment.
+
 ## Session ID matching
 
 All commands accept a session ID **prefix** — you only need enough characters to uniquely identify the session (typically 6-8).
