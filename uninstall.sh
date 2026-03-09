@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ── Claude UI Uninstaller ────────────────────────────────────────────
 
-INSTALL_DIR="${CLAUDE_UI_HOME:-$HOME/.claude-ui}"
+INSTALL_DIR="${INSTALL_DIR:-${CLAUDE_UI_HOME:-$HOME/.claude-ui}}"
 CLAUDE_DIR="$HOME/.claude"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
@@ -42,14 +42,20 @@ import json
 import os
 
 settings_file = os.path.expanduser("~/.claude/settings.json")
-install_dir = os.path.realpath(os.environ.get("INSTALL_DIR", os.path.expanduser("~/.claude-ui")))
+install_dir = os.environ.get("INSTALL_DIR", os.path.expanduser("~/.claude-ui"))
+
+# Match against both the configured path and its realpath (covers stable opt + versioned Cellar)
+match_paths = {install_dir, os.path.realpath(install_dir)}
 
 with open(settings_file) as f:
     settings = json.load(f)
 
+def is_our_command(cmd):
+    return any(p in cmd for p in match_paths)
+
 # Remove statusline if it points to our install
 sl = settings.get("statusLine", {})
-if sl.get("command", "").startswith(f"python3 {install_dir}"):
+if is_our_command(sl.get("command", "")):
     del settings["statusLine"]
     print(f"  \033[92m✓\033[0m Removed statusline config")
 
@@ -59,7 +65,7 @@ for event in list(hooks.keys()):
     hooks[event] = [
         rule for rule in hooks[event]
         if not any(
-            install_dir in h.get("command", "")
+            is_our_command(h.get("command", ""))
             for h in rule.get("hooks", [])
         )
     ]
