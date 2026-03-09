@@ -40,7 +40,18 @@ claude-ui-mode full    # switch to 3-line statusline
 /ui:cost              # cost breakdown
 ```
 
-To uninstall: `claude-ui-uninstall`
+### Uninstall
+
+```bash
+claude-ui-uninstall       # clean settings, then uninstall
+brew uninstall claudeui
+```
+
+If you already ran `brew uninstall` first:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/slima4/claudeui/main/uninstall.sh | bash
+```
 
 ### Settings
 

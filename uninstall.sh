@@ -44,8 +44,13 @@ import os
 settings_file = os.path.expanduser("~/.claude/settings.json")
 install_dir = os.environ.get("INSTALL_DIR", os.path.expanduser("~/.claude-ui"))
 
-# Match against both the configured path and its realpath (covers stable opt + versioned Cellar)
+# Match against all known install locations
 match_paths = {install_dir, os.path.realpath(install_dir)}
+# Also match brew paths and common install locations
+for p in ["/opt/homebrew/opt/claudeui", "/opt/homebrew/Cellar/claudeui",
+          "/usr/local/opt/claudeui", "/usr/local/Cellar/claudeui",
+          os.path.expanduser("~/.claude-ui")]:
+    match_paths.add(p)
 
 with open(settings_file) as f:
     settings = json.load(f)
