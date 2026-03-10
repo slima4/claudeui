@@ -7,9 +7,17 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue?logo=python&logoColor=white)]()
 [![Shell](https://img.shields.io/badge/shell-bash%20%7C%20zsh-black?logo=gnubash&logoColor=white)]()
 
-A collection of utilities and scripts for working with Claude Code.
+Real-time dashboard, statusline, and analytics for Claude Code sessions.
 
 **Website:** [slima4.github.io/claudeui](https://slima4.github.io/claudeui/)
+
+**Statusline** — context, cost, sparkline, and live tool trace right inside Claude Code:
+
+![Statusline](assets/statusline-demo.png)
+
+**Monitor** — full dashboard in a second terminal:
+
+![Monitor](assets/monitor-demo.png)
 
 ## Install
 
