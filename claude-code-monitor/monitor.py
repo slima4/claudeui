@@ -21,6 +21,7 @@ import textwrap
 import subprocess
 import sys
 import termios
+import threading
 import time
 import tty
 import signal
@@ -93,6 +94,7 @@ SHOW_CURSOR = "\033[?25h"
 ERASE_LINE = "\033[2K"
 ALT_SCREEN_ON = "\033[?1049h"
 ALT_SCREEN_OFF = "\033[?1049l"
+LOGO_GREEN = "\033[38;5;46m"
 
 # Matrix colors
 M_DARK = "\033[38;2;0;59;0m"
@@ -1371,6 +1373,60 @@ def export_session(path, session_id):
     sys.stdout.flush()
 
 
+# ── Splash screen ────────────────────────────────────────────────────
+
+LOGO_LINES = [
+    (f" {BOLD} ██████╗ ██╗      █████╗ ██╗   ██╗██████╗ ███████╗", f"{LOGO_GREEN}██╗   ██╗██╗{RESET}"),
+    (f" {BOLD}██╔════╝ ██║     ██╔══██╗██║   ██║██╔══██╗██╔════╝", f"{LOGO_GREEN}██║   ██║██║{RESET}"),
+    (f" {BOLD}██║      ██║     ███████║██║   ██║██║  ██║█████╗  ", f"{LOGO_GREEN}██║   ██║██║{RESET}"),
+    (f" {BOLD}██║      ██║     ██╔══██║██║   ██║██║  ██║██╔══╝  ", f"{LOGO_GREEN}██║   ██║██║{RESET}"),
+    (f" {BOLD}╚██████╗ ███████╗██║  ██║╚██████╔╝██████╔╝███████╗", f"{LOGO_GREEN}╚██████╔╝██║{RESET}"),
+    (f" {BOLD} ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝", f"{LOGO_GREEN} ╚═════╝ ╚═╝{RESET}"),
+]
+
+
+def show_splash(out, status_text="Searching for session..."):
+    """Render the splash screen with logo and status line."""
+    term_h = shutil.get_terminal_size().lines
+    term_w = shutil.get_terminal_size().columns
+    logo_height = len(LOGO_LINES)
+    # Center vertically (logo + 2 blank + status + subtitle)
+    top_pad = max(0, (term_h - logo_height - 4) // 2)
+
+    out.write(CLEAR)
+    out.write("\n" * top_pad)
+
+    for claude_part, ui_part in LOGO_LINES:
+        line = claude_part + ui_part
+        # Rough center: logo is ~62 chars wide
+        pad = max(0, (term_w - 62) // 2)
+        out.write(" " * pad + line + "\n")
+
+    out.write("\n")
+    subtitle = f"{DIM}Live Session Monitor{RESET}"
+    # "Live Session Monitor" is 20 chars
+    pad = max(0, (term_w - 20) // 2)
+    out.write(" " * pad + subtitle + "\n\n")
+
+    # Status line
+    status_pad = max(0, (term_w - len(status_text)) // 2)
+    out.write(" " * status_pad + f"{CYAN}{status_text}{RESET}")
+    out.flush()
+
+
+def update_splash_status(out, status_text):
+    """Update just the status line on the splash screen."""
+    term_h = shutil.get_terminal_size().lines
+    term_w = shutil.get_terminal_size().columns
+    logo_height = len(LOGO_LINES)
+    top_pad = max(0, (term_h - logo_height - 4) // 2)
+    status_row = top_pad + logo_height + 3  # logo + blank + subtitle + blank
+    out.write(f"\033[{status_row};1H{ERASE_LINE}")
+    pad = max(0, (term_w - len(status_text)) // 2)
+    out.write(" " * pad + f"{CYAN}{status_text}{RESET}")
+    out.flush()
+
+
 # ── Main loop ───────────────────────────────────────────────────────
 
 def main():
@@ -1378,30 +1434,12 @@ def main():
         list_sessions()
         return
 
-    # Find transcript
-    if len(sys.argv) > 1:
-        path = find_session_by_id(sys.argv[1])
-        if not path:
-            print(f"Session '{sys.argv[1]}' not found. Use --list to see sessions.")
-            sys.exit(1)
-    else:
-        path = find_transcript()
-        if not path:
-            print("No active session found. Use --list or pass a session ID.")
-            sys.exit(1)
+    global _original_termios
+    old_settings = termios.tcgetattr(sys.stdin)
+    _original_termios = old_settings
+    out = sys.stdout
 
-    session_id = Path(path).stem[:8]
-
-    last_mtime = 0
-    frame = 0
     running = True
-    cached_body = None
-    needs_full_redraw = True
-    show_help = False
-    last_data_time = time.time()
-    last_duration_sec = -1  # track when to redraw for live duration
-    just_updated = False
-    update_flash_until = 0  # timestamp until which the pulse is shown
 
     def handle_sigint(sig, frame_):
         nonlocal running
@@ -1410,15 +1448,87 @@ def main():
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGWINCH, lambda s, f: None)  # handle terminal resize
 
-    global _original_termios
-    old_settings = termios.tcgetattr(sys.stdin)
-    _original_termios = old_settings
-    out = sys.stdout
-
     try:
         tty.setcbreak(sys.stdin.fileno())
-        out.write(ALT_SCREEN_ON + HIDE_CURSOR + CLEAR)
+        out.write(ALT_SCREEN_ON + HIDE_CURSOR)
         out.flush()
+
+        # ── Splash screen with background loading ──
+        splash_start = time.time()
+        show_splash(out)
+
+        # Load session + settings in background thread
+        load_result = {}
+
+        def _load_session():
+            load_result["settings"] = load_settings()
+            if len(sys.argv) > 1:
+                load_result["path"] = find_session_by_id(sys.argv[1])
+            else:
+                load_result["path"] = find_transcript()
+            if load_result.get("path"):
+                try:
+                    load_result["data"] = parse_transcript(load_result["path"])
+                except Exception:
+                    load_result["data"] = None
+
+        loader = threading.Thread(target=_load_session, daemon=True)
+        loader.start()
+
+        # Animate splash status while loading
+        dots = 0
+        while loader.is_alive():
+            dots = (dots + 1) % 4
+            status = "Searching for session" + "." * dots + " " * (3 - dots)
+            if load_result.get("path"):
+                sid = Path(load_result["path"]).stem[:8]
+                status = f"Loading session {sid}" + "." * dots + " " * (3 - dots)
+            update_splash_status(out, status)
+            time.sleep(0.3)
+
+        # Ensure splash shows for at least 1.2s
+        elapsed = time.time() - splash_start
+        if elapsed < 1.2:
+            if load_result.get("path"):
+                sid = Path(load_result["path"]).stem[:8]
+                update_splash_status(out, f"Session {sid} ready")
+            time.sleep(1.2 - elapsed)
+
+        # Check if session was found
+        path = load_result.get("path")
+        if not path:
+            out.write(SHOW_CURSOR + ALT_SCREEN_OFF)
+            out.flush()
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            if len(sys.argv) > 1:
+                print(f"Session '{sys.argv[1]}' not found. Use --list to see sessions.")
+            else:
+                print("No active session found. Use --list or pass a session ID.")
+            sys.exit(1)
+
+        session_id = Path(path).stem[:8]
+        r = load_result.get("data")
+
+        last_mtime = 0
+        frame = 0
+        cached_body = None
+        needs_full_redraw = True
+        show_help = False
+        last_data_time = time.time()
+        last_duration_sec = -1  # track when to redraw for live duration
+        just_updated = False
+        update_flash_until = 0  # timestamp until which the pulse is shown
+
+        # Force initial parse if background load succeeded
+        if r:
+            try:
+                last_mtime = os.stat(path).st_mtime
+            except FileNotFoundError:
+                pass
+            term_width = get_terminal_width()
+            lines = render_dashboard(r, 0, True, term_width)
+            cached_body = "\n".join(lines)
+            needs_full_redraw = True
 
         while running:
             try:
