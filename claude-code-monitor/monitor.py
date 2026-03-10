@@ -538,14 +538,18 @@ def render_matrix_header(frame, width=60, active=True):
 
 
 def render_dashboard(r, idle_secs, just_updated, term_width):
-    """Render dashboard lines (without matrix header).
+    """Render full dashboard as (header_lines, log_lines) tuple.
 
-    Args:
-        r: parsed transcript dict
-        idle_secs: seconds since last transcript change
-        just_updated: True if data just changed (for pulse effect)
-        term_width: terminal width for adaptive layout
+    header_lines: static sections pinned below matrix header
+    log_lines: scrollable LOG section that fills remaining space
     """
+    header_lines = _render_header_body(r, idle_secs, just_updated, term_width)
+    log_lines = _render_log(r, term_width)
+    return header_lines, log_lines
+
+
+def _render_header_body(r, idle_secs, just_updated, term_width):
+    """Render static dashboard sections (session, context, cost, current, session totals)."""
     pricing = get_pricing(r["model"])
     cost = calc_cost(r["tokens"], pricing)
     ctx_used = r["last_context"]
@@ -770,7 +774,14 @@ def render_dashboard(r, idle_secs, just_updated, term_width):
         session_stats += f"  {DIM}│{RESET}  {GRAY}{r['subagent_count']}{RESET} {DIM}agents{RESET}"
     lines.append(session_stats)
 
-    # ── Mini event log ──
+    return lines
+
+
+def _render_log(r, term_width):
+    """Render the LOG section (scrollable area)."""
+    w = min(term_width - 2, 80)
+    lines = []
+
     if r["event_log"]:
         lines.append("")
         lines.append(f"  {BOLD}{DIM}LOG{RESET}")
@@ -798,25 +809,50 @@ def render_dashboard(r, idle_secs, just_updated, term_width):
             for cont in wrapped[1:]:
                 lines.append(f"  {indent}{evt_color}{cont}{RESET}")
 
-    lines.append("")
-
     return lines
 
 
 def render_footer(term_width):
-    """Render the sticky footer hotkey bar."""
-    w = min(term_width, 80)
+    """Render the sticky footer hotkey bar, adapted to terminal width."""
+    w = min(term_width - 2, 80)
     sep = f"  {DIM}{'─' * w}{RESET}"
-    keys = (
-        f"  {BOLD}{CYAN}s{RESET}{DIM}tats{RESET}  "
-        f"{BOLD}{CYAN}d{RESET}{DIM}etails{RESET}  "
-        f"{BOLD}{CYAN}l{RESET}{DIM}og{RESET}  "
-        f"{BOLD}{CYAN}e{RESET}{DIM}xport{RESET}  "
-        f"{DIM}sessi{RESET}{BOLD}{CYAN}o{RESET}{DIM}ns{RESET}  "
-        f"{BOLD}{CYAN}c{RESET}{DIM}onfig{RESET}  "
-        f"{BOLD}{CYAN}?{RESET}{DIM}help{RESET}  "
-        f"{BOLD}{CYAN}q{RESET}{DIM}uit{RESET}"
-    )
+
+    if term_width >= 60:
+        # Full labels
+        keys = (
+            f"  {BOLD}{CYAN}s{RESET}{DIM}tats{RESET}  "
+            f"{BOLD}{CYAN}d{RESET}{DIM}etails{RESET}  "
+            f"{BOLD}{CYAN}l{RESET}{DIM}og{RESET}  "
+            f"{BOLD}{CYAN}e{RESET}{DIM}xport{RESET}  "
+            f"{DIM}sessi{RESET}{BOLD}{CYAN}o{RESET}{DIM}ns{RESET}  "
+            f"{BOLD}{CYAN}c{RESET}{DIM}onfig{RESET}  "
+            f"{BOLD}{CYAN}?{RESET}{DIM}help{RESET}  "
+            f"{BOLD}{CYAN}q{RESET}{DIM}uit{RESET}"
+        )
+    elif term_width >= 40:
+        # Short labels
+        keys = (
+            f" {BOLD}{CYAN}s{RESET}{DIM}tat{RESET} "
+            f"{BOLD}{CYAN}d{RESET}{DIM}tl{RESET} "
+            f"{BOLD}{CYAN}l{RESET}{DIM}og{RESET} "
+            f"{BOLD}{CYAN}e{RESET}{DIM}xp{RESET} "
+            f"{BOLD}{CYAN}o{RESET}{DIM}ss{RESET} "
+            f"{BOLD}{CYAN}c{RESET}{DIM}fg{RESET} "
+            f"{BOLD}{CYAN}?{RESET} "
+            f"{BOLD}{CYAN}q{RESET}"
+        )
+    else:
+        # Keys only
+        keys = (
+            f" {BOLD}{CYAN}s{RESET} "
+            f"{BOLD}{CYAN}d{RESET} "
+            f"{BOLD}{CYAN}l{RESET} "
+            f"{BOLD}{CYAN}e{RESET} "
+            f"{BOLD}{CYAN}o{RESET} "
+            f"{BOLD}{CYAN}c{RESET} "
+            f"{BOLD}{CYAN}?{RESET} "
+            f"{BOLD}{CYAN}q{RESET}"
+        )
     return f"{sep}\n{keys}"
 
 
@@ -1526,7 +1562,6 @@ def main():
 
         last_mtime = 0
         frame = 0
-        cached_body = None
         needs_full_redraw = True
         show_help = False
         last_data_time = time.time()
@@ -1535,14 +1570,15 @@ def main():
         update_flash_until = 0  # timestamp until which the pulse is shown
 
         # Force initial parse if background load succeeded
+        cached_header = None
+        cached_log = None
         if r:
             try:
                 last_mtime = os.stat(path).st_mtime
             except FileNotFoundError:
                 pass
             term_width = get_terminal_width()
-            lines = render_dashboard(r, 0, True, term_width)
-            cached_body = "\n".join(lines)
+            cached_header, cached_log = render_dashboard(r, 0, True, term_width)
             needs_full_redraw = True
 
         while running:
@@ -1576,13 +1612,13 @@ def main():
                         if os.path.exists(script):
                             run_tool(script, [session_id])
                             needs_full_redraw = True
-                            cached_body = None
+                            cached_header = cached_log = None
                     elif key in ("d", "D"):
                         script = find_tool_script("manager")
                         if os.path.exists(script):
                             run_tool(script, ["show", session_id])
                             needs_full_redraw = True
-                            cached_body = None
+                            cached_header = cached_log = None
                     elif key in ("l", "L"):
                         if r and r.get("full_log"):
                             show_log_viewer(path, term_width)
@@ -1590,18 +1626,18 @@ def main():
                     elif key in ("e", "E"):
                         export_session(path, session_id)
                         needs_full_redraw = True
-                        cached_body = None
+                        cached_header = cached_log = None
                     elif key in ("o", "O"):
                         script = find_tool_script("manager")
                         if os.path.exists(script):
                             project_name = Path(path).parent.name
                             run_tool(script, ["list", f"--project={project_name}"])
                             needs_full_redraw = True
-                            cached_body = None
+                            cached_header = cached_log = None
                     elif key in ("c", "C"):
                         show_settings_panel(term_width)
                         needs_full_redraw = True
-                        cached_body = None
+                        cached_header = cached_log = None
                         continue
 
                 # Re-parse transcript only when file changes
@@ -1613,24 +1649,24 @@ def main():
                     if new_path and new_path != path:
                         path = new_path
                         session_id = Path(path).stem[:8]
-                        cached_body = None
+                        cached_header = cached_log = None
                         needs_full_redraw = True
                     time.sleep(1)
                     continue
 
-                if mtime != last_mtime or cached_body is None:
+                if mtime != last_mtime or cached_header is None:
                     last_mtime = mtime
                     last_data_time = now
                     update_flash_until = now + 0.5  # pulse for 500ms
                     try:
                         r = parse_transcript(path)
                         idle_secs = now - last_data_time
-                        lines = render_dashboard(r, idle_secs, True, term_width)
-                        cached_body = "\n".join(lines)
+                        cached_header, cached_log = render_dashboard(r, idle_secs, True, term_width)
                         needs_full_redraw = True
                     except Exception as e:
-                        if cached_body is None:
-                            cached_body = f"  {RED}Error: {e}{RESET}"
+                        if cached_header is None:
+                            cached_header = [f"  {RED}Error: {e}{RESET}"]
+                            cached_log = []
 
                 # Live duration + idle status update every second
                 elapsed = now - last_data_time if r else 0
@@ -1640,8 +1676,7 @@ def main():
                     if r:
                         just_updated = now < update_flash_until
                         idle_secs = now - last_data_time
-                        lines = render_dashboard(r, idle_secs, just_updated, term_width)
-                        cached_body = "\n".join(lines)
+                        cached_header, cached_log = render_dashboard(r, idle_secs, just_updated, term_width)
                         needs_full_redraw = True
 
                 # Auto-follow: if idle for >5 min, check for newer sessions
@@ -1653,7 +1688,7 @@ def main():
                             path = new_path
                             session_id = Path(path).stem[:8]
                             last_mtime = 0
-                            cached_body = None
+                            cached_header = cached_log = None
                             needs_full_redraw = True
 
                 # Matrix animates when Claude is working or transcript just changed
@@ -1664,8 +1699,27 @@ def main():
                 if needs_full_redraw:
                     matrix_line = render_matrix_header(frame, min(term_width, 80), active=is_active)
                     footer = render_footer(term_width)
-                    # Row 1: header, Row 2+: body, last 2 rows: footer
-                    out.write(CLEAR + matrix_line + "\n" + cached_body)
+
+                    # Layout: row 1 = matrix, rows 2..N = header, remaining = log, last 2 = footer
+                    header_str = "\n".join(cached_header) if cached_header else ""
+                    header_row_count = len(cached_header) if cached_header else 0
+                    # 1 (matrix) + header rows + footer (2 rows: separator + keys)
+                    fixed_rows = 1 + header_row_count + 2
+                    log_space = max(0, term_h - fixed_rows)
+
+                    # Truncate log to fit available space (show latest entries)
+                    log_lines = cached_log if cached_log else []
+                    if len(log_lines) > log_space:
+                        log_lines = log_lines[-log_space:]
+                    log_str = "\n".join(log_lines)
+
+                    # Clear screen and write: matrix + header
+                    out.write(CLEAR + matrix_line + "\n" + header_str)
+                    # Clear log area and write log
+                    log_start_row = 2 + header_row_count  # 1-based, after matrix + header
+                    for row in range(log_start_row, term_h - 1):
+                        out.write(f"\033[{row};1H{ERASE_LINE}")
+                    out.write(f"\033[{log_start_row};1H{log_str}")
                     # Pin footer to bottom
                     footer_row = term_h - 1  # separator line
                     out.write(f"\033[{footer_row};1H{footer}")
