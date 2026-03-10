@@ -52,10 +52,9 @@ WHITE = "\033[97m"
 GRAY = "\033[90m"
 
 # Widget system — left-side 3-row animation area
-# Select via STATUSLINE_WIDGET env var (default: matrix)
+# Select via custom.widget in claudeui.json, or STATUSLINE_WIDGET env var (default: matrix)
 # Built-in: matrix, bars, progress, none
 # Custom: drop a .py file with a render(frame, ratio) function into widgets/
-WIDGET = os.environ.get("STATUSLINE_WIDGET", "matrix")
 
 # Settings from ~/.claude/claudeui.json
 _SETTINGS_CACHE = None
@@ -90,6 +89,11 @@ def get_setting(*keys, default=None):
         else:
             return default
     return cfg if cfg is not None else default
+
+
+def is_visible(line, component):
+    """Check if a statusline component is enabled in custom config."""
+    return get_setting("custom", line, component, default=True)
 
 
 def _load_widget(name):
@@ -598,39 +602,61 @@ def main():
     sep = f" {dim}│{RESET} "
 
     # Line 1: session core
-    ctx_part = f"{bar} {CYAN}{tokens_str}{RESET}{dim}/{RESET}{GRAY}{limit_str}{RESET}"
-    if compact_prediction:
-        ctx_part += f" {dim}│{RESET} {compact_prediction}"
-    line1_parts = [
-        f"{BOLD}{MAGENTA}{model}{RESET}",
-        ctx_part,
-    ]
-    if sparkline_part:
+    line1_parts = []
+    if is_visible("line1", "model"):
+        line1_parts.append(f"{BOLD}{MAGENTA}{model}{RESET}")
+    if is_visible("line1", "context_bar"):
+        ctx_part = f"{bar}"
+        if is_visible("line1", "token_count"):
+            ctx_part += f" {CYAN}{tokens_str}{RESET}{dim}/{RESET}{GRAY}{limit_str}{RESET}"
+        if compact_prediction and is_visible("line1", "compact_prediction"):
+            ctx_part += f" {dim}│{RESET} {compact_prediction}"
+        line1_parts.append(ctx_part)
+    elif is_visible("line1", "token_count"):
+        ctx_part = f"{CYAN}{tokens_str}{RESET}{dim}/{RESET}{GRAY}{limit_str}{RESET}"
+        if compact_prediction and is_visible("line1", "compact_prediction"):
+            ctx_part += f" {dim}│{RESET} {compact_prediction}"
+        line1_parts.append(ctx_part)
+    elif compact_prediction and is_visible("line1", "compact_prediction"):
+        line1_parts.append(compact_prediction)
+    if sparkline_part and is_visible("line1", "sparkline"):
         line1_parts.append(sparkline_part)
-    line1_parts.extend([
-        f"{YELLOW}{cost_str}{RESET}",
-        f"{WHITE}{duration_str}{RESET}",
-        f"{CYAN}{metrics['compact_count']}{RESET}{dim}x{RESET}compact",
-        f"{dim}#{RESET}{GRAY}{session_id}{RESET}",
-    ])
+    if is_visible("line1", "cost"):
+        line1_parts.append(f"{YELLOW}{cost_str}{RESET}")
+    if is_visible("line1", "duration"):
+        line1_parts.append(f"{WHITE}{duration_str}{RESET}")
+    if is_visible("line1", "compact_count"):
+        line1_parts.append(
+            f"{CYAN}{metrics['compact_count']}{RESET}{dim}x{RESET}compact"
+        )
+    if is_visible("line1", "session_id"):
+        line1_parts.append(f"{dim}#{RESET}{GRAY}{session_id}{RESET}")
 
     # Line 2: project telemetry
-    line2_parts = [f"{GREEN}{cwd}{RESET}"]
-    if branch_part:
+    line2_parts = []
+    if is_visible("line2", "cwd"):
+        line2_parts.append(f"{GREEN}{cwd}{RESET}")
+    if branch_part and is_visible("line2", "git_branch"):
         line2_parts.append(branch_part)
-    line2_parts.extend([
-        f"{CYAN}{metrics['turn_count']}{RESET} {dim}turns{RESET}",
-        f"{CYAN}{len(metrics['files_touched'])}{RESET} {dim}files{RESET}",
-        f"{error_part.split(' ')[0]} {dim}err{RESET}",
-        f"{cache_part.split(' ')[0]} {dim}cache{RESET}",
-    ])
-    if metrics["thinking_count"] > 0:
+    if is_visible("line2", "turns"):
+        line2_parts.append(
+            f"{CYAN}{metrics['turn_count']}{RESET} {dim}turns{RESET}"
+        )
+    if is_visible("line2", "files"):
+        line2_parts.append(
+            f"{CYAN}{len(metrics['files_touched'])}{RESET} {dim}files{RESET}"
+        )
+    if is_visible("line2", "errors"):
+        line2_parts.append(f"{error_part.split(' ')[0]} {dim}err{RESET}")
+    if is_visible("line2", "cache"):
+        line2_parts.append(f"{cache_part.split(' ')[0]} {dim}cache{RESET}")
+    if metrics["thinking_count"] > 0 and is_visible("line2", "thinking"):
         line2_parts.append(
             f"{MAGENTA}{metrics['thinking_count']}{RESET}{dim}x{RESET} {dim}think{RESET}"
         )
-    if cost_per_turn:
+    if cost_per_turn and is_visible("line2", "cost_per_turn"):
         line2_parts.append(cost_per_turn)
-    if subagent_part:
+    if subagent_part and is_visible("line2", "agents"):
         line2_parts.append(
             f"{CYAN}{metrics['subagent_count']}{RESET} {dim}agents{RESET}"
         )
@@ -639,46 +665,66 @@ def main():
     line3 = ""
     recent = metrics["recent_tools"]
     file_edits = metrics["current_turn_file_edits"]
-    if recent or file_edits:
-        parts3 = []
-        if recent:
-            trail = []
-            for t in recent[-6:]:
-                p = t.split()
-                if len(p) >= 2:
-                    trail.append(f"{dim}{p[0].lower()}{RESET} {GREEN}{p[-1]}{RESET}")
-                else:
-                    trail.append(f"{dim}{p[0].lower()}{RESET}")
-            parts3.append(f" {dim}\u2192{RESET} ".join(trail))
-        if file_edits:
-            top = sorted(file_edits.items(), key=lambda x: -x[1])[:3]
-            parts3.append(" ".join(
-                f"{YELLOW}{n}{RESET}{dim}×{c}{RESET}" for n, c in top
-            ))
+    parts3 = []
+    if recent and is_visible("line3", "tool_trace"):
+        trail = []
+        for t in recent[-6:]:
+            p = t.split()
+            if len(p) >= 2:
+                trail.append(f"{dim}{p[0].lower()}{RESET} {GREEN}{p[-1]}{RESET}")
+            else:
+                trail.append(f"{dim}{p[0].lower()}{RESET}")
+        parts3.append(f" {dim}\u2192{RESET} ".join(trail))
+    if file_edits and is_visible("line3", "file_edits"):
+        top = sorted(file_edits.items(), key=lambda x: -x[1])[:3]
+        parts3.append(" ".join(
+            f"{YELLOW}{n}{RESET}{dim}×{c}{RESET}" for n, c in top
+        ))
+    if parts3:
         line3 = f" {sep.join(parts3)}"
 
     # ── Compact mode: single line with essentials ──
     if compact_mode:
-        compact_parts = [
-            f"{BOLD}{MAGENTA}{model}{RESET}",
-            f"{bar} {CYAN}{tokens_str}{RESET}{dim}/{RESET}{GRAY}{limit_str}{RESET}",
-            f"{YELLOW}{cost_str}{RESET}",
-            f"{WHITE}{duration_str}{RESET}",
-            f"{CYAN}{metrics['turn_count']}{RESET} {dim}turns{RESET}",
-            f"{CYAN}{metrics['compact_count']}{RESET}{dim}x{RESET}compact",
-        ]
-        if metrics["tool_errors"] > 0:
+        compact_parts = []
+        if is_visible("line1", "model"):
+            compact_parts.append(f"{BOLD}{MAGENTA}{model}{RESET}")
+        if is_visible("line1", "context_bar") and is_visible("line1", "token_count"):
+            compact_parts.append(
+                f"{bar} {CYAN}{tokens_str}{RESET}{dim}/{RESET}{GRAY}{limit_str}{RESET}"
+            )
+        elif is_visible("line1", "context_bar"):
+            compact_parts.append(f"{bar}")
+        elif is_visible("line1", "token_count"):
+            compact_parts.append(
+                f"{CYAN}{tokens_str}{RESET}{dim}/{RESET}{GRAY}{limit_str}{RESET}"
+            )
+        if is_visible("line1", "cost"):
+            compact_parts.append(f"{YELLOW}{cost_str}{RESET}")
+        if is_visible("line1", "duration"):
+            compact_parts.append(f"{WHITE}{duration_str}{RESET}")
+        if is_visible("line2", "turns"):
+            compact_parts.append(
+                f"{CYAN}{metrics['turn_count']}{RESET} {dim}turns{RESET}"
+            )
+        if is_visible("line1", "compact_count"):
+            compact_parts.append(
+                f"{CYAN}{metrics['compact_count']}{RESET}{dim}x{RESET}compact"
+            )
+        if metrics["tool_errors"] > 0 and is_visible("line2", "errors"):
             compact_parts.append(error_part)
-        print(f" {sep.join(compact_parts)}")
+        if compact_parts:
+            print(f" {sep.join(compact_parts)}")
         return
 
     # ── Full mode: 3 lines ──
 
-    # Widget animation (advances with each tool call)
-    widget_fn = _load_widget(WIDGET)
+    # Widget: config takes precedence, then env var
+    widget_name = (get_setting("custom", "widget", default=None)
+                   or os.environ.get("STATUSLINE_WIDGET", "matrix"))
+    widget_fn = _load_widget(widget_name)
 
-    line1_str = f" {sep.join(line1_parts)}"
-    line2_str = f" {sep.join(line2_parts)}"
+    line1_str = f" {sep.join(line1_parts)}" if line1_parts else ""
+    line2_str = f" {sep.join(line2_parts)}" if line2_parts else ""
     line3_str = line3 if line3 else ""
 
     if widget_fn:
@@ -687,8 +733,10 @@ def main():
         print(f" {wdg[1]}{line2_str}")
         print(f" {wdg[2]}{line3_str}")
     else:
-        print(f"{line1_str}")
-        print(f"{line2_str}")
+        if line1_str:
+            print(f"{line1_str}")
+        if line2_str:
+            print(f"{line2_str}")
         if line3_str:
             print(f"{line3_str}")
 

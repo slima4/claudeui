@@ -140,14 +140,20 @@ echo -e "  ${BOLD}Statusline mode:${RESET}"
 echo ""
 echo -e "  ${CYAN}1)${RESET} ${BOLD}full${RESET}     3-line statusline with all metrics, sparkline, tool trace"
 echo -e "  ${CYAN}2)${RESET} ${BOLD}compact${RESET}  1-line statusline with essentials (model, context, cost)"
+echo -e "  ${CYAN}3)${RESET} ${BOLD}custom${RESET}   Choose which components to show (configure after install)"
 echo ""
-echo -ne "  Choose [${BOLD}1${RESET}/${BOLD}2${RESET}] (default: 1): "
+echo -ne "  Choose [${BOLD}1${RESET}/${BOLD}2${RESET}/${BOLD}3${RESET}] (default: 1): "
 read -r mode_choice < /dev/tty || mode_choice=""
+DISPLAY_MODE=""
 case "${mode_choice}" in
-    2|compact) STATUSLINE_MODE="compact" ;;
-    *) STATUSLINE_MODE="full" ;;
+    2|compact) STATUSLINE_MODE="compact"; DISPLAY_MODE="compact" ;;
+    3|custom)  STATUSLINE_MODE="full";    DISPLAY_MODE="custom" ;;
+    *)         STATUSLINE_MODE="full";    DISPLAY_MODE="full" ;;
 esac
-ok "Statusline mode: $STATUSLINE_MODE"
+ok "Statusline mode: $DISPLAY_MODE"
+if [ "$DISPLAY_MODE" = "custom" ]; then
+    echo -e "  ${DIM}Run 'claude-ui-mode custom' after install to configure components.${RESET}"
+fi
 export STATUSLINE_MODE
 
 # ── Configure settings.json ─────────────────────────────────────────
@@ -284,7 +290,7 @@ ok "claude-sessions"
 
 cat > "$BIN_DIR/claude-ui-mode" << EOF
 #!/usr/bin/env bash
-exec bash "$INSTALL_DIR/claude-ui-mode.sh" "\$@"
+exec python3 "$INSTALL_DIR/claude-ui-mode.py" "\$@"
 EOF
 chmod +x "$BIN_DIR/claude-ui-mode"
 ok "claude-ui-mode"
@@ -313,7 +319,7 @@ echo -e "${GREEN}${BOLD}  ╚═════════════════
 echo ""
 echo -e "  ${BOLD}What's installed:${RESET}"
 echo ""
-echo -e "  ${CYAN}Statusline${RESET}      Real-time status bar in Claude Code (${STATUSLINE_MODE} mode)"
+echo -e "  ${CYAN}Statusline${RESET}      Real-time status bar in Claude Code (${DISPLAY_MODE} mode)"
 echo -e "  ${CYAN}Hooks${RESET}           File hotspots, dependency warnings, churn alerts"
 echo -e "  ${CYAN}Commands${RESET}        /ui:session  /ui:cost  /ui:perf  /ui:context"
 echo -e "  ${CYAN}Monitor${RESET}         claude-ui-monitor (live dashboard in separate terminal)"

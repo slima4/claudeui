@@ -50,6 +50,7 @@ claude-stats          # post-session analytics
 claude-sessions list  # browse all sessions
 claude-ui-mode compact # switch to 1-line statusline
 claude-ui-mode full    # switch to 3-line statusline
+claude-ui-mode custom  # interactive configurator
 # inside Claude Code:
 /ui:session           # deep session report
 /ui:cost              # cost breakdown
@@ -67,6 +68,29 @@ If you already ran `brew uninstall` first:
 ```bash
 curl -sSL https://raw.githubusercontent.com/slima4/claudeui/main/uninstall.sh | bash
 ```
+
+### Customize Statusline
+
+Toggle individual components, pick a widget, or apply a preset — all from an interactive TUI:
+
+```bash
+claude-ui-mode custom
+```
+
+<p align="center">
+  <img src="assets/configurator.png" alt="Statusline Configurator" width="520">
+</p>
+
+Or use CLI flags for non-interactive configuration:
+
+```bash
+claude-ui-mode custom -p focused          # apply preset
+claude-ui-mode custom -w hex              # change widget
+claude-ui-mode custom --hide model,cost   # hide specific components
+claude-ui-mode custom -l                  # list current config
+```
+
+Three presets included: **all** (everything visible), **minimal** (essentials only), **focused** (hides noise like model, cost, session ID).
 
 ### Settings
 
