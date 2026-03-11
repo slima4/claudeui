@@ -219,16 +219,15 @@ if os.path.exists(settings_file):
             os.rename(settings_file, backup)
             print(f"  \033[93m!\033[0m Backed up corrupted settings to {backup}")
 
-# Keep stable path — do not resolve symlinks (Cellar paths break on upgrade)
-real_dir = install_dir
-
 # ── Statusline ──
+# Use 'claudetui' from PATH — no absolute paths, survives brew upgrade
 mode = os.environ.get("STATUSLINE_MODE", "full")
-statusline_cmd = f"python3 {real_dir}/claude-code-statusline/statusline.py"
+statusline_cmd = "claudetui statusline"
 if mode == "compact":
     statusline_cmd += " --compact"
 current_sl = settings.get("statusLine", {})
 if current_sl.get("command") != statusline_cmd:
+    # Also remove old absolute-path statusline commands
     settings["statusLine"] = {
         "type": "command",
         "command": statusline_cmd,
@@ -238,28 +237,42 @@ else:
     print(f"  \033[92m✓\033[0m Statusline already configured ({mode})")
 
 # ── Hooks ──
+# Use 'claudetui hook <name>' — no absolute paths, survives brew upgrade
 hooks = settings.get("hooks", {})
 
 hook_configs = [
     {
         "event": "SessionStart",
         "matcher": "",
-        "command": f"python3 {real_dir}/claude-code-hooks/session-heatmap.py",
+        "command": "claudetui hook session-heatmap",
         "label": "SessionStart → file hotspots",
     },
     {
         "event": "PreToolUse",
         "matcher": "Edit|Write",
-        "command": f"python3 {real_dir}/claude-code-hooks/pre-edit-churn.py",
+        "command": "claudetui hook pre-edit-churn",
         "label": "PreToolUse → churn warnings",
     },
     {
         "event": "PostToolUse",
         "matcher": "Edit|Write",
-        "command": f"python3 {real_dir}/claude-code-hooks/post-edit-deps.py",
+        "command": "claudetui hook post-edit-deps",
         "label": "PostToolUse → dependency check",
     },
 ]
+
+# Remove old hooks that used absolute paths (from pre-v0.3.3 installs)
+for event in list(hooks.keys()):
+    hooks[event] = [
+        rule for rule in hooks[event]
+        if not any(
+            "claude-code-hooks/" in h.get("command", "")
+            and "claudetui hook" not in h.get("command", "")
+            for h in rule.get("hooks", [])
+        )
+    ]
+    if not hooks[event]:
+        del hooks[event]
 
 for cfg in hook_configs:
     event = cfg["event"]

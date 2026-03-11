@@ -67,6 +67,10 @@ with open(settings_file) as f:
     settings = json.load(f)
 
 def is_our_command(cmd):
+    # Match new PATH-based commands (claudetui statusline/hook)
+    if cmd.startswith("claudetui "):
+        return True
+    # Match old absolute-path commands (pre-v0.3.3)
     return any(p in cmd for p in match_paths)
 
 # Remove statusline if it points to our install

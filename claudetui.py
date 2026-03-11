@@ -4,15 +4,45 @@ import os
 import sys
 
 VERSION = "0.3.0"
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_RAW_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _stable_dir(d):
+    """Convert Homebrew Cellar path to stable opt symlink.
+
+    /opt/homebrew/Cellar/claude-tui/0.3.2/libexec
+    → /opt/homebrew/opt/claude-tui/libexec
+
+    The opt path is a symlink Homebrew maintains across upgrades,
+    so settings.json paths survive 'brew upgrade'.
+    """
+    if "/Cellar/" not in d:
+        return d
+    prefix, rest = d.split("/Cellar/", 1)
+    parts = rest.split("/")
+    if len(parts) >= 3:
+        formula = parts[0]
+        after_version = "/".join(parts[2:])
+        return f"{prefix}/opt/{formula}/{after_version}"
+    return d
+
+
+SCRIPT_DIR = _stable_dir(_RAW_DIR)
 
 SUBCOMMANDS = {
-    "monitor":   ("python", "claude-code-monitor/monitor.py",                  "Live session dashboard"),
-    "stats":     ("python", "claude-code-session-stats/session-stats.py",       "Post-session analytics"),
-    "sessions":  ("python", "claude-code-session-manager/session-manager.py",   "Browse, compare, export sessions"),
-    "mode":      ("python", "claude-ui-mode.py",                                "Switch statusline mode (full/compact/custom)"),
-    "setup":     ("bash",   "install.sh",                                       "Configure statusline, hooks, and commands"),
-    "uninstall": ("bash",   "uninstall.sh",                                     "Remove ClaudeTUI configuration"),
+    "monitor":    ("python", "claude-code-monitor/monitor.py",                  "Live session dashboard"),
+    "stats":      ("python", "claude-code-session-stats/session-stats.py",       "Post-session analytics"),
+    "sessions":   ("python", "claude-code-session-manager/session-manager.py",   "Browse, compare, export sessions"),
+    "mode":       ("python", "claude-ui-mode.py",                                "Switch statusline mode (full/compact/custom)"),
+    "statusline": ("python", "claude-code-statusline/statusline.py",             "Run statusline (used by Claude Code)"),
+    "setup":      ("bash",   "install.sh",                                       "Configure statusline, hooks, and commands"),
+    "uninstall":  ("bash",   "uninstall.sh",                                     "Remove ClaudeTUI configuration"),
+}
+
+HOOKS = {
+    "session-heatmap": "claude-code-hooks/session-heatmap.py",
+    "pre-edit-churn":  "claude-code-hooks/pre-edit-churn.py",
+    "post-edit-deps":  "claude-code-hooks/post-edit-deps.py",
 }
 
 HELP = """\
@@ -53,6 +83,25 @@ def main():
 
     cmd = sys.argv[1]
     args = sys.argv[2:]
+
+    # Hook dispatch: claudetui hook <name> [args...]
+    if cmd == "hook":
+        if not args or args[0] in ("-h", "--help"):
+            print("Usage: claudetui hook <name>\n")
+            print("Hooks:")
+            for name in sorted(HOOKS):
+                print(f"  {name}")
+            sys.exit(0)
+        hook_name = args[0]
+        if hook_name not in HOOKS:
+            print(f"claudetui: unknown hook '{hook_name}'", file=sys.stderr)
+            print(f"Available: {', '.join(sorted(HOOKS))}", file=sys.stderr)
+            sys.exit(2)
+        target_path = os.path.join(SCRIPT_DIR, HOOKS[hook_name])
+        if not os.path.exists(target_path):
+            print(f"claudetui: hook script not found at {target_path}", file=sys.stderr)
+            sys.exit(1)
+        os.execvp("python3", ["python3", target_path] + args[1:])
 
     if cmd not in SUBCOMMANDS:
         print(f"claudetui: unknown command '{cmd}'\n", file=sys.stderr)
