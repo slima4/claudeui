@@ -575,14 +575,14 @@
   <section class="tool-section">
     <div class="container">
       <h2>Live Monitor</h2>
-      <p class="subtitle">Full-screen dashboard in a separate terminal — run <code>claude-ui-monitor</code></p>
+      <p class="subtitle">Full-screen dashboard in a separate terminal — run <code>claudetui monitor</code></p>
 
       <div class="terminal" style="margin-bottom: 24px;">
         <div class="terminal-bar">
           <div class="terminal-dot red"></div>
           <div class="terminal-dot yellow"></div>
           <div class="terminal-dot green"></div>
-          <div class="terminal-title">claude-ui-monitor</div>
+          <div class="terminal-title">claudetui monitor</div>
         </div>
         <div class="terminal-body" style="font-size: 12px; line-height: 1.6;">
 <div class="line"><span class="t-green-dim">10101111010111101011110101111010111101011110101111010111101011110101111010111101</span></div>
@@ -650,8 +650,8 @@
       <h2>Session Stats</h2>
       <p class="subtitle">Post-session analytics and multi-session summaries</p>
       <div class="tool-terminal">
-<div class="line"><span class="t-dim">$</span> <span class="t-bright">claude-stats</span></div>
-<div class="line"><span class="t-dim">$</span> <span class="t-bright">claude-stats --days 7 -s</span></div>
+<div class="line"><span class="t-dim">$</span> <span class="t-bright">claudetui stats</span></div>
+<div class="line"><span class="t-dim">$</span> <span class="t-bright">claudetui stats --days 7 -s</span></div>
 <div class="line"></div>
 <div class="line">  <span class="t-bold">Session Summary (6 sessions)</span></div>
 <div class="line">  <span class="t-dim">──────────────────────────────────────────────────────────────────</span></div>
@@ -699,7 +699,7 @@
           <h3>Install</h3>
           <pre><span class="comment"># Homebrew (macOS)</span>
 brew tap slima4/claude-tui &amp;&amp; brew install claude-tui
-claude-ui-setup
+claudetui setup
 
 <span class="comment"># Or install script</span>
 curl -sSL https://raw.githubusercontent.com/slima4/claude-tui/main/install.sh | bash</pre>
@@ -711,7 +711,7 @@ curl -sSL https://raw.githubusercontent.com/slima4/claude-tui/main/install.sh | 
 claude
 
 <span class="comment"># Open a second terminal for live monitor</span>
-claude-ui-monitor</pre>
+claudetui monitor</pre>
         </div>
         <div class="quickstart-card">
           <div class="step">Step 3</div>
@@ -721,8 +721,8 @@ claude-ui-monitor</pre>
 /tui:cost
 
 <span class="comment"># After a session</span>
-claude-stats
-claude-sessions list</pre>
+claudetui stats
+claudetui sessions list</pre>
         </div>
       </div>
     </div>
@@ -735,7 +735,7 @@ claude-sessions list</pre>
       <p class="subtitle">Clean removal of all settings, hooks, and commands</p>
       <div class="tool-terminal">
 <div class="line"><span class="t-dim"># Homebrew</span></div>
-<div class="line"><span class="t-bright">claude-ui-uninstall</span></div>
+<div class="line"><span class="t-bright">claudetui uninstall</span></div>
 <div class="line"><span class="t-bright">brew uninstall claude-tui</span></div>
 <div class="line"></div>
 <div class="line"><span class="t-dim"># Already ran brew uninstall first?</span></div>

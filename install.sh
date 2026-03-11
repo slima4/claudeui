@@ -187,7 +187,7 @@ case "${mode_choice}" in
 esac
 ok "Statusline mode: $DISPLAY_MODE"
 if [ "$DISPLAY_MODE" = "custom" ]; then
-    echo -e "  ${DIM}Run 'claude-ui-mode custom' after install to configure components.${RESET}"
+    echo -e "  ${DIM}Run 'claudetui mode custom' after install to configure components.${RESET}"
 fi
 export STATUSLINE_MODE
 
@@ -301,41 +301,21 @@ step "Installing CLI tools..."
 
 mkdir -p "$BIN_DIR"
 
-# Create wrapper scripts
-cat > "$BIN_DIR/claude-ui-monitor" << EOF
+# Primary CLI command
+cat > "$BIN_DIR/claudetui" << EOF
 #!/usr/bin/env bash
-exec python3 "$INSTALL_DIR/claude-code-monitor/monitor.py" "\$@"
+exec python3 "$INSTALL_DIR/claudetui.py" "\$@"
 EOF
-chmod +x "$BIN_DIR/claude-ui-monitor"
-ok "claude-ui-monitor"
+chmod +x "$BIN_DIR/claudetui"
+ok "claudetui"
 
-cat > "$BIN_DIR/claude-stats" << EOF
-#!/usr/bin/env bash
-exec python3 "$INSTALL_DIR/claude-code-session-stats/session-stats.py" "\$@"
-EOF
-chmod +x "$BIN_DIR/claude-stats"
-ok "claude-stats"
-
-cat > "$BIN_DIR/claude-sessions" << EOF
-#!/usr/bin/env bash
-exec python3 "$INSTALL_DIR/claude-code-session-manager/session-manager.py" "\$@"
-EOF
-chmod +x "$BIN_DIR/claude-sessions"
-ok "claude-sessions"
-
-cat > "$BIN_DIR/claude-ui-mode" << EOF
-#!/usr/bin/env bash
-exec python3 "$INSTALL_DIR/claude-ui-mode.py" "\$@"
-EOF
-chmod +x "$BIN_DIR/claude-ui-mode"
-ok "claude-ui-mode"
-
-cat > "$BIN_DIR/claude-ui-uninstall" << EOF
-#!/usr/bin/env bash
-exec bash "$INSTALL_DIR/uninstall.sh" "\$@"
-EOF
-chmod +x "$BIN_DIR/claude-ui-uninstall"
-ok "claude-ui-uninstall"
+# Remove old command names from previous installs
+for old_cmd in claude-ui-monitor claude-stats claude-sessions claude-ui-mode claude-ui-setup claude-ui-uninstall; do
+    if [ -f "$BIN_DIR/$old_cmd" ]; then
+        rm "$BIN_DIR/$old_cmd"
+        ok "removed old $old_cmd"
+    fi
+done
 
 # Check if BIN_DIR is in PATH
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
@@ -355,9 +335,9 @@ echo ""
 echo -e "  ${CYAN}Statusline${RESET}      Real-time status bar in Claude Code (${DISPLAY_MODE} mode)"
 echo -e "  ${CYAN}Hooks${RESET}           File hotspots, dependency warnings, churn alerts"
 echo -e "  ${CYAN}Commands${RESET}        /tui:session  /tui:cost  /tui:perf  /tui:context"
-echo -e "  ${CYAN}Monitor${RESET}         claude-ui-monitor (live dashboard in separate terminal)"
-echo -e "  ${CYAN}Stats${RESET}           claude-stats (post-session analytics)"
-echo -e "  ${CYAN}Sessions${RESET}        claude-sessions (browse, compare, export)"
+echo -e "  ${CYAN}Monitor${RESET}         claudetui monitor (live dashboard in separate terminal)"
+echo -e "  ${CYAN}Stats${RESET}           claudetui stats (post-session analytics)"
+echo -e "  ${CYAN}Sessions${RESET}        claudetui sessions (browse, compare, export)"
 echo ""
 echo -e "  ${BOLD}Quick start:${RESET}"
 echo ""
@@ -365,23 +345,23 @@ echo -e "  ${DIM}# Start Claude Code — statusline and hooks are automatic${RES
 echo -e "  claude"
 echo ""
 echo -e "  ${DIM}# Open a second terminal for the live monitor${RESET}"
-echo -e "  claude-ui-monitor"
+echo -e "  claudetui monitor"
 echo ""
 echo -e "  ${DIM}# Inside Claude Code, use slash commands${RESET}"
 echo -e "  /tui:session    ${DIM}# full session report${RESET}"
 echo -e "  /tui:cost       ${DIM}# cost deep dive${RESET}"
 echo ""
 echo -e "  ${DIM}# Post-session analytics${RESET}"
-echo -e "  claude-stats"
-echo -e "  claude-sessions list"
-echo -e "  claude-ui-mode compact  ${DIM}# switch to 1-line statusline${RESET}"
+echo -e "  claudetui stats"
+echo -e "  claudetui sessions list"
+echo -e "  claudetui mode compact  ${DIM}# switch to 1-line statusline${RESET}"
 echo ""
 echo -e "  ${DIM}Installed to: $INSTALL_DIR${RESET}"
 if [[ "$INSTALL_DIR" == */opt/claude-tui/* || "$INSTALL_DIR" == */Cellar/claude-tui/* ]]; then
     echo -e "  ${DIM}To update:    brew upgrade claude-tui${RESET}"
-    echo -e "  ${DIM}To uninstall: claude-ui-uninstall && brew uninstall claude-tui${RESET}"
+    echo -e "  ${DIM}To uninstall: claudetui uninstall && brew uninstall claude-tui${RESET}"
 else
     echo -e "  ${DIM}To update:    cd $INSTALL_DIR && git pull${RESET}"
-    echo -e "  ${DIM}To uninstall: claude-ui-uninstall${RESET}"
+    echo -e "  ${DIM}To uninstall: claudetui uninstall${RESET}"
 fi
 echo ""

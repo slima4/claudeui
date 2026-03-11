@@ -24,10 +24,10 @@ RESET = "\033[0m"
 
 
 MAIN_HELP = f"""\
-{BOLD}claude-ui-mode{RESET} — statusline mode switcher for ClaudeTUI
+{BOLD}claudetui mode{RESET} — statusline mode switcher for ClaudeTUI
 
 {BOLD}Usage:{RESET}
-  claude-ui-mode {CYAN}<command>{RESET} [options]
+  claudetui mode {CYAN}<command>{RESET} [options]
 
 {BOLD}Commands:{RESET}
   {CYAN}full{RESET}           Switch to 3-line statusline (all metrics)
@@ -39,21 +39,21 @@ MAIN_HELP = f"""\
   {CYAN}-v{RESET}, {CYAN}--version{RESET}  Show version
 
 {BOLD}Examples:{RESET}
-  claude-ui-mode                  {DIM}# show current mode{RESET}
-  claude-ui-mode full             {DIM}# 3-line with everything{RESET}
-  claude-ui-mode compact          {DIM}# 1-line essentials{RESET}
-  claude-ui-mode custom           {DIM}# interactive configurator{RESET}
-  claude-ui-mode custom -l        {DIM}# show what's hidden{RESET}
+  claudetui mode                  {DIM}# show current mode{RESET}
+  claudetui mode full             {DIM}# 3-line with everything{RESET}
+  claudetui mode compact          {DIM}# 1-line essentials{RESET}
+  claudetui mode custom           {DIM}# interactive configurator{RESET}
+  claudetui mode custom -l        {DIM}# show what's hidden{RESET}
 
 {DIM}Config: ~/.claude/claudeui.json{RESET}
 {DIM}Docs:   https://github.com/slima4/claude-tui{RESET}
 """
 
 CUSTOM_HELP = f"""\
-{BOLD}claude-ui-mode custom{RESET} — configure statusline components
+{BOLD}claudetui mode custom{RESET} — configure statusline components
 
 {BOLD}Usage:{RESET}
-  claude-ui-mode custom [options]
+  claudetui mode custom [options]
 
   Run without options to open the interactive configurator.
   Use arrow keys to navigate, space to toggle, s to save.
@@ -79,13 +79,13 @@ CUSTOM_HELP = f"""\
   {CYAN}focused{RESET}    Hide noise (model, tokens, cost, session ID, cwd, agents)
 
 {BOLD}Examples:{RESET}
-  claude-ui-mode custom                         {DIM}# interactive TUI{RESET}
-  claude-ui-mode custom -l                      {DIM}# list hidden components{RESET}
-  claude-ui-mode custom -p focused              {DIM}# apply focused preset{RESET}
-  claude-ui-mode custom -w hex                  {DIM}# switch to hex widget{RESET}
-  claude-ui-mode custom --hide model,cost       {DIM}# hide model and cost{RESET}
-  claude-ui-mode custom --show model            {DIM}# show model again{RESET}
-  claude-ui-mode custom -p all -w none          {DIM}# reset all, no widget{RESET}
+  claudetui mode custom                         {DIM}# interactive TUI{RESET}
+  claudetui mode custom -l                      {DIM}# list hidden components{RESET}
+  claudetui mode custom -p focused              {DIM}# apply focused preset{RESET}
+  claudetui mode custom -w hex                  {DIM}# switch to hex widget{RESET}
+  claudetui mode custom --hide model,cost       {DIM}# hide model and cost{RESET}
+  claudetui mode custom --show model            {DIM}# show model again{RESET}
+  claudetui mode custom -p all -w none          {DIM}# reset all, no widget{RESET}
 """
 
 
@@ -110,19 +110,19 @@ def show_current():
     settings = load_settings()
     cmd = settings.get("statusLine", {}).get("command", "")
     if not cmd:
-        print(f"  {RED}\u2717{RESET} No statusline configured. Run claude-ui-setup first.")
+        print(f"  {RED}\u2717{RESET} No statusline configured. Run claudetui setup first.")
         return
     mode = "compact" if "--compact" in cmd else "full"
     print(f"  Current mode: {BOLD}{CYAN}{mode}{RESET}")
     print()
-    print(f"  {DIM}Run claude-ui-mode --help for usage info{RESET}")
+    print(f"  {DIM}Run claudetui mode --help for usage info{RESET}")
 
 
 def set_mode(mode):
     settings = load_settings()
     current_cmd = settings.get("statusLine", {}).get("command", "")
     if not current_cmd:
-        print(f"  {RED}\u2717{RESET} No statusline configured. Run claude-ui-setup first.")
+        print(f"  {RED}\u2717{RESET} No statusline configured. Run claudetui setup first.")
         sys.exit(1)
 
     base_cmd = current_cmd.replace(" --compact", "").strip()
@@ -660,7 +660,7 @@ def cmd_custom(args):
 
         else:
             print(f"  {RED}\u2717{RESET} Unknown option: {arg}")
-            print(f"  {DIM}Run claude-ui-mode custom --help for usage{RESET}")
+            print(f"  {DIM}Run claudetui mode custom --help for usage{RESET}")
             sys.exit(1)
 
         i += 1
@@ -697,7 +697,7 @@ def main():
     else:
         print(f"  {RED}\u2717{RESET} Unknown command: {cmd}")
         print()
-        print(f"  {DIM}Run claude-ui-mode --help for usage{RESET}")
+        print(f"  {DIM}Run claudetui mode --help for usage{RESET}")
         sys.exit(1)
 
 

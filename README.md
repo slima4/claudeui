@@ -28,7 +28,7 @@ Real-time dashboard, statusline, and analytics for Claude Code sessions.
 ```bash
 brew tap slima4/claude-tui
 brew install claude-tui
-claude-ui-setup       # configure statusline, hooks, and commands
+claudetui setup       # configure statusline, hooks, and commands
 ```
 
 ### Script
@@ -46,13 +46,13 @@ git clone https://github.com/slima4/claude-tui.git && ./claude-tui/install.sh
 After install:
 
 ```bash
-claude                # statusline + hooks work automatically
-claude-ui-monitor        # live dashboard in a second terminal
-claude-stats          # post-session analytics
-claude-sessions list  # browse all sessions
-claude-ui-mode compact # switch to 1-line statusline
-claude-ui-mode full    # switch to 3-line statusline
-claude-ui-mode custom  # interactive configurator
+claude                    # statusline + hooks work automatically
+claudetui monitor         # live dashboard in a second terminal
+claudetui stats           # post-session analytics
+claudetui sessions list   # browse all sessions
+claudetui mode compact    # switch to 1-line statusline
+claudetui mode full       # switch to 3-line statusline
+claudetui mode custom  # interactive configurator
 # inside Claude Code:
 /tui:session           # deep session report
 /tui:cost              # cost breakdown
@@ -61,7 +61,7 @@ claude-ui-mode custom  # interactive configurator
 ### Uninstall
 
 ```bash
-claude-ui-uninstall       # clean settings, then uninstall
+claudetui uninstall       # clean settings, then uninstall
 brew uninstall claude-tui
 ```
 
@@ -76,7 +76,7 @@ curl -sSL https://raw.githubusercontent.com/slima4/claude-tui/main/uninstall.sh 
 Toggle individual components, pick a widget, or apply a preset — all from an interactive TUI:
 
 ```bash
-claude-ui-mode custom
+claudetui mode custom
 ```
 
 <p align="center">
@@ -86,10 +86,10 @@ claude-ui-mode custom
 Or use CLI flags for non-interactive configuration:
 
 ```bash
-claude-ui-mode custom -p focused          # apply preset
-claude-ui-mode custom -w hex              # change widget
-claude-ui-mode custom --hide model,cost   # hide specific components
-claude-ui-mode custom -l                  # list current config
+claudetui mode custom -p focused          # apply preset
+claudetui mode custom -w hex              # change widget
+claudetui mode custom --hide model,cost   # hide specific components
+claudetui mode custom -l                  # list current config
 ```
 
 Three presets included: **all** (everything visible), **minimal** (essentials only), **focused** (hides noise like model, cost, session ID).

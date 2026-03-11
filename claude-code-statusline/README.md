@@ -14,7 +14,7 @@ Two modes available — **full** (3-line, default) and **compact** (1-line):
  Opus 4.6 │ ████████░░░░░░░░░░░░ 73% 145.4k/200.0k │ $215.63 │ 13h 01m │ 218 turns │ 5xcompact
 ```
 
-Switch anytime: `claude-ui-mode compact` / `claude-ui-mode full` (restart Claude Code after).
+Switch anytime: `claudetui mode compact` / `claudetui mode full` (restart Claude Code after).
 
 Full mode — three-line layout with Matrix binary rain animation on the left:
 

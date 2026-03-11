@@ -16,8 +16,8 @@ Real-time status bar for Claude Code. Single-file script.
 - Reads session JSON from stdin (provided by Claude Code's `statusLine` feature)
 - Parses the transcript JSONL file for token usage, compaction events, tool calls, errors, turns, cache ratio, and thinking blocks
 - Three modes: `full` (3-line with sparkline, telemetry, tool trace), `compact` (1-line essentials), `custom` (configurable components)
-- Mode switch: `claude-ui-mode full|compact|custom` (single Python script: `claude-ui-mode.py`), or `--compact` flag
-- Custom mode: `claude-ui-mode custom` launches curses TUI (arrow keys + space) to toggle individual components per line
+- Mode switch: `claudetui mode full|compact|custom` (single Python script: `claude-ui-mode.py`), or `--compact` flag
+- Custom mode: `claudetui mode custom` launches curses TUI (arrow keys + space) to toggle individual components per line
 - Custom config stored in `~/.claude/claudeui.json` under `"custom"` key, with `is_visible(line, component)` helper
 - CLI flags: `--hide`, `--show`, `--widget`, `--preset`, `--list` for non-interactive configuration
 - Presets: `all` (everything visible), `minimal` (essentials only), `focused` (hides model, token count, cost, session ID, cwd, cost/turn, agents)
@@ -95,11 +95,12 @@ To test local changes to the statusline or hooks, update `~/.claude/settings.jso
 
 The same applies to hook commands — replace the installed path with your local repo path. Remember to restore the original path when done testing (or re-run `./install.sh`).
 
-`claude-ui-mode.py` and `claude-ui-monitor` can be tested directly without changing settings:
+`claudetui` and its subcommands can be tested directly without changing settings:
 ```bash
-python3 claude-ui-mode.py custom     # test the configurator TUI
-python3 claude-ui-mode.py --help     # test CLI
-python3 claude-code-monitor/monitor.py  # test the monitor
+python3 claudetui.py monitor         # test the monitor
+python3 claudetui.py mode custom     # test the configurator TUI
+python3 claudetui.py mode --help     # test CLI
+python3 claudetui.py --help          # test dispatcher
 ```
 
 ## Conventions
