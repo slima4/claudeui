@@ -1288,12 +1288,11 @@ def _build_log_lines(raw_log, max_desc, filter_name="all"):
 def show_log_viewer(transcript_path, term_width):
     """Interactive log viewer with filtering and auto-scroll."""
     out = sys.stdout
-    w = min(term_width - 4, 100)
-    max_desc = w - 14
 
     filter_idx = 0  # index into FILTER_NAMES
     auto_follow = True
     last_mtime = 0
+    last_w = 0
     raw_log = []
     log_lines = []
     event_count = 0
@@ -1303,6 +1302,14 @@ def show_log_viewer(transcript_path, term_width):
     needs_redraw = True
 
     while True:
+        # Recalculate width each loop iteration (handles terminal resize)
+        cur_tw = shutil.get_terminal_size().columns
+        w = cur_tw - 4
+        max_desc = w - 14
+        if w != last_w:
+            last_w = w
+            needs_rebuild = True
+
         # Reload transcript if file changed or first run
         try:
             mtime = os.stat(transcript_path).st_mtime
