@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-_FALLBACK_VERSION = "0.3.5"
+_FALLBACK_VERSION = "0.3.6"
 
 
 def _get_version():

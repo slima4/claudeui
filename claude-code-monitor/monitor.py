@@ -15,6 +15,7 @@ Hotkeys:
 
 import json
 import os
+import re
 import select
 import shutil
 import textwrap
@@ -28,6 +29,23 @@ import signal
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+
+_ANSI_RE = re.compile(r'\033\[[0-9;]*m')
+
+
+def _visible_len(s):
+    """Length of string after stripping ANSI escape codes."""
+    return len(_ANSI_RE.sub('', s))
+
+
+def _visual_rows(lines, term_width):
+    """Count actual terminal rows, accounting for line wrapping."""
+    rows = 0
+    for line in lines:
+        vlen = _visible_len(line)
+        rows += max(1, -(-vlen // term_width))  # ceil division, min 1
+    return rows
+
 
 # Settings from ~/.claude/claudeui.json
 _SETTINGS_CACHE = None
@@ -409,7 +427,13 @@ def parse_transcript(path):
     r["last_context"] = last_context
     r["recent_tools"] = r["recent_tools"][-5:]
     r["full_log"] = list(r["event_log"])  # full log for viewer
-    r["event_log"] = r["event_log"][-8:]  # truncated for dashboard
+    max_log = get_setting("monitor", "log_lines", default=8)
+    if max_log is False or max_log == 0:
+        r["event_log"] = []
+    elif isinstance(max_log, int) and max_log > 0:
+        r["event_log"] = r["event_log"][-max_log:]
+    else:
+        r["event_log"] = r["event_log"][-8:]  # invalid config, fallback
     return r
 
 
@@ -762,7 +786,7 @@ def _render_header_body(r, idle_secs, just_updated, term_width):
 
     # Last error detail
     if r["last_error_msg"]:
-        err_text = r["last_error_msg"]
+        err_text = r["last_error_msg"].replace("\n", " ").strip()
         max_line = w - 4
         label = f"  {DIM}Last error:{RESET} "
         first_line_max = max_line - 12
@@ -775,7 +799,7 @@ def _render_header_body(r, idle_secs, just_updated, term_width):
     lines.append("")
 
     # ── Activity: Session totals ──
-    lines.append(f"  {BOLD}{DIM}SESSION{RESET}")
+    lines.append(f"  {BOLD}SESSION{RESET}")
     total_tools = sum(r["tool_counts"].values())
     top3 = r["tool_counts"].most_common(3)
     tools_str = "  ".join(f"{DIM}{t}:{RESET}{GRAY}{c}{RESET}" for t, c in top3)
@@ -819,8 +843,6 @@ def _render_log(r, term_width):
         events = r["event_log"]
         if isinstance(max_log, int) and max_log > 0:
             events = events[-max_log:]
-        lines.append("")
-        lines.append(f"  {BOLD}{DIM}LOG{RESET}")
         max_desc = w - 14  # 2 indent + 10 timestamp + 2 gap
         indent = " " * 14  # align continuation with description start
         for evt_ts, evt_desc in events:
@@ -1760,21 +1782,40 @@ def main():
 
                     # Layout: row 1 = matrix, rows 2..N = header, remaining = log, last 2 = footer
                     header_str = "\n".join(cached_header) if cached_header else ""
-                    header_row_count = len(cached_header) if cached_header else 0
-                    # 1 (matrix) + header rows + footer (2 rows: separator + keys)
-                    fixed_rows = 1 + header_row_count + 2
+                    # Count visual rows (lines that wrap take 2+ rows)
+                    header_visual_rows = _visual_rows(cached_header, term_width) if cached_header else 0
+                    # 1 (matrix) + header visual rows + footer (2 rows: separator + keys)
+                    fixed_rows = 1 + header_visual_rows + 2
                     log_space = max(0, term_h - fixed_rows)
-
-                    # Truncate log to fit available space (show latest entries)
-                    log_lines = cached_log if cached_log else []
-                    if len(log_lines) > log_space:
-                        log_lines = log_lines[-log_space:]
-                    log_str = "\n".join(log_lines)
 
                     # Clear screen and write: matrix + header
                     out.write(CLEAR + matrix_line + "\n" + header_str)
+                    log_start_row = 2 + header_visual_rows  # 1-based, after matrix + header
+
+                    # LOG title: render between header and log entries, only if room
+                    if cached_log and log_space >= 3:
+                        event_count = len(r.get("full_log", r.get("event_log", [])))
+                        out.write(f"\033[{log_start_row};1H\n  {BOLD}LOG{RESET}  {DIM}({event_count} events){RESET}")
+                        log_start_row += 2  # blank line + title
+                        log_space -= 2
+
+                    # Truncate log to fit available space (visual rows)
+                    log_lines = cached_log if cached_log else []
+                    if log_lines and log_space > 0:
+                        fitted = []
+                        used = 0
+                        for line in reversed(log_lines):
+                            rows = _visual_rows([line], term_width)
+                            if used + rows > log_space:
+                                break
+                            fitted.append(line)
+                            used += rows
+                        log_lines = list(reversed(fitted))
+                    elif log_space <= 0:
+                        log_lines = []
+                    log_str = "\n".join(log_lines)
+
                     # Clear log area and write log
-                    log_start_row = 2 + header_row_count  # 1-based, after matrix + header
                     for row in range(log_start_row, term_h - 1):
                         out.write(f"\033[{row};1H{ERASE_LINE}")
                     out.write(f"\033[{log_start_row};1H{log_str}")
