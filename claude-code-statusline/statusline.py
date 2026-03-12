@@ -715,6 +715,10 @@ def main():
             compact_parts.append(
                 f"{CYAN}{tokens_str}{RESET}{dim}/{RESET}{GRAY}{limit_str}{RESET}"
             )
+        if is_visible("line1", "sparkline") and sparkline_part:
+            compact_spark = build_sparkline(metrics["context_history"], width=10)
+            if compact_spark:
+                compact_parts.append(compact_spark)
         if is_visible("line1", "cost"):
             compact_parts.append(f"{YELLOW}{cost_str}{RESET}")
         if is_visible("line1", "duration"):

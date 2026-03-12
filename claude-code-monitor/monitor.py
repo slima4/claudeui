@@ -38,6 +38,22 @@ def _visible_len(s):
     return len(_ANSI_RE.sub('', s))
 
 
+def _truncate_ansi(s, max_visible):
+    """Truncate an ANSI-colored string to max_visible characters."""
+    visible = 0
+    i = 0
+    while i < len(s) and visible < max_visible:
+        if s[i] == '\033' and i + 1 < len(s) and s[i + 1] == '[':
+            j = i + 2
+            while j < len(s) and s[j] != 'm':
+                j += 1
+            i = j + 1
+        else:
+            visible += 1
+            i += 1
+    return s[:i] + RESET if i < len(s) else s
+
+
 def _visual_rows(lines, term_width):
     """Count actual terminal rows, accounting for line wrapping."""
     rows = 0
@@ -619,10 +635,10 @@ def _render_header_body(r, idle_secs, just_updated, term_width):
     ctx_used = r["last_context"]
     ratio = ctx_used / CONTEXT_LIMIT if ctx_used > 0 else 0
     duration = format_duration_live(r["start_time"])
-    w = min(term_width - 2, 80)  # content width, cap at 80
-    bar_width = max(20, min(w - 30, 40))
+    w = min(term_width - 2, 120)  # content width, cap at 120
+    bar_width = max(20, min(w - 30, 50))
     bar = build_bar(ratio, bar_width)
-    spark_width = max(20, min(w - 10, 60))
+    spark_width = max(20, min(w - 10, 80))
     sparkline = build_sparkline(r["context_history"], spark_width)
 
     # Compaction prediction (turns until auto-compaction, not full limit)
@@ -681,9 +697,9 @@ def _render_header_body(r, idle_secs, just_updated, term_width):
         status_dot = f"{GRAY}○{RESET}"
         status_text = f"{GRAY}IDLE {idle_m}m{RESET}"
 
-    # Separator color — pulse on new data
+    # Separator color — pulse on new data (full terminal width like matrix)
     sep_color = PULSE_NEW if just_updated else M_MID
-    sep = f"{sep_color}{'─' * w}{RESET}"
+    sep = f"{sep_color}{'─' * term_width}{RESET}"
 
     # Turn timer
     turn_timer = ""
@@ -738,7 +754,7 @@ def _render_header_body(r, idle_secs, just_updated, term_width):
     # Token breakdown bar
     tok_total = r["tokens"]["input"] + r["tokens"]["cache_read"] + r["tokens"]["output"]
     if tok_total > 0:
-        tb_width = max(20, min(w - 10, 50))
+        tb_width = max(20, min(w - 10, 60))
         inp_frac = r["tokens"]["input"] / tok_total
         cache_frac = r["tokens"]["cache_read"] / tok_total
         out_frac = r["tokens"]["output"] / tok_total
@@ -781,10 +797,11 @@ def _render_header_body(r, idle_secs, just_updated, term_width):
 
     # Current turn files
     turn_all_files = set(list(r["turn_files_read"].keys()) + list(r["turn_files_edited"].keys()))
+    max_turn_files = 3 if w < 60 else 5
     turn_top_files = sorted(
         turn_all_files,
         key=lambda f: -(r["turn_files_read"].get(f, 0) + r["turn_files_edited"].get(f, 0))
-    )[:5]
+    )[:max_turn_files]
     if turn_top_files:
         file_parts = []
         for f in turn_top_files:
@@ -828,10 +845,11 @@ def _render_header_body(r, idle_secs, just_updated, term_width):
     lines.append(f"  {GRAY}{r['turns']}{RESET} {DIM}turns{RESET}  {DIM}│{RESET}  {GRAY}{total_tools}{RESET} {DIM}tools{RESET}  {DIM}│{RESET}  {tools_str}")
 
     # Session files
+    max_files = 3 if w < 60 else 5
     top_files = sorted(
         set(list(r["files_read"].keys()) + list(r["files_edited"].keys())),
         key=lambda f: -(r["files_read"].get(f, 0) + r["files_edited"].get(f, 0))
-    )[:5]
+    )[:max_files]
     if top_files:
         file_parts = []
         for f in top_files:
@@ -849,7 +867,11 @@ def _render_header_body(r, idle_secs, just_updated, term_width):
         session_stats += f"  {DIM}│{RESET}  {GRAY}{r['skill_count']}{RESET} {DIM}skills{RESET}"
     lines.append(session_stats)
 
-    return lines
+    # Truncate lines that would wrap (skip separator which should be full-width)
+    return [
+        _truncate_ansi(l, term_width) if _visible_len(l) > term_width else l
+        for l in lines
+    ]
 
 
 def _render_log(r, term_width):
@@ -858,7 +880,7 @@ def _render_log(r, term_width):
     if max_log is False or max_log == 0:
         return []
 
-    w = min(term_width - 2, 80)
+    w = min(term_width - 2, 120)
     lines = []
 
     if r["event_log"]:
@@ -894,8 +916,7 @@ def _render_log(r, term_width):
 
 def render_footer(term_width):
     """Render the sticky footer hotkey bar, adapted to terminal width."""
-    w = min(term_width - 2, 80)
-    sep = f"  {DIM}{'─' * w}{RESET}"
+    sep = f"{DIM}{'─' * term_width}{RESET}"
 
     if term_width >= 60:
         # Full labels
@@ -1803,7 +1824,7 @@ def main():
                 term_h = shutil.get_terminal_size().lines
 
                 if needs_full_redraw:
-                    matrix_line = render_matrix_header(frame, min(term_width, 80), active=is_active)
+                    matrix_line = render_matrix_header(frame, term_width, active=is_active)
                     footer = render_footer(term_width)
 
                     # Layout: row 1 = matrix, rows 2..N = header, remaining = log, last 2 = footer
@@ -1852,7 +1873,7 @@ def main():
                     needs_full_redraw = False
                 elif is_active:
                     # Animate matrix header at 100ms
-                    matrix_line = render_matrix_header(frame, min(term_width, 80), active=True)
+                    matrix_line = render_matrix_header(frame, term_width, active=True)
                     out.write(f"\033[1;1H{ERASE_LINE}{matrix_line}")
                     out.flush()
 
