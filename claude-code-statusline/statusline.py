@@ -62,6 +62,22 @@ def _visible_len(s):
     return len(_ANSI_RE.sub("", s))
 
 
+def _truncate(s, max_cols):
+    """Truncate string to max_cols visible characters, preserving ANSI codes."""
+    visible = 0
+    i = 0
+    while i < len(s):
+        m = _ANSI_RE.match(s, i)
+        if m:
+            i = m.end()
+            continue
+        visible += 1
+        if visible > max_cols:
+            return s[:i] + RESET
+        i += 1
+    return s
+
+
 def _get_terminal_cols():
     """Get real terminal width, even when running as a piped subprocess.
 
@@ -742,8 +758,10 @@ def main():
 
     # Wrap trail items across lines based on terminal width
     term_cols = _get_terminal_cols()
+    buffer = get_setting("custom", "buffer", default=30)
+    term_cols_padded = term_cols - buffer  # buffer to avoid edge clipping
     widget_offset = 10  # widget (7) + padding (3)
-    max_width = term_cols - widget_offset
+    max_width = term_cols_padded - widget_offset
     arrow = f" {dim}\u2192{RESET} "
     arrow_vis = 4  # " → " visible width
 
@@ -824,19 +842,19 @@ def main():
 
     if widget_fn:
         wdg = widget_fn(frame=metrics["tool_calls"], ratio=ratio)
-        print(f" {wdg[0]}{line1_str}")
-        print(f" {wdg[1]}{line2_str}")
+        print(_truncate(f" {wdg[0]}{line1_str}", term_cols_padded))
+        print(_truncate(f" {wdg[1]}{line2_str}", term_cols_padded))
         first_extra = line3_lines[0] if line3_lines else ""
-        print(f" {wdg[2]}{first_extra}")
+        print(_truncate(f" {wdg[2]}{first_extra}", term_cols_padded))
         for extra_line in line3_lines[1:]:
-            print(f"         {extra_line}")
+            print(_truncate(f"         {extra_line}", term_cols_padded))
     else:
         if line1_str:
-            print(f"{line1_str}")
+            print(_truncate(f"{line1_str}", term_cols_padded))
         if line2_str:
-            print(f"{line2_str}")
+            print(_truncate(f"{line2_str}", term_cols_padded))
         for extra_line in line3_lines:
-            print(f"{extra_line}")
+            print(_truncate(f"{extra_line}", term_cols_padded))
 
 
 if __name__ == "__main__":

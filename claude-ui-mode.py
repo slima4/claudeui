@@ -59,6 +59,7 @@ CUSTOM_HELP = f"""\
 {BOLD}Options:{RESET}
   {CYAN}-l{RESET}, {CYAN}--list{RESET}               Show current configuration
   {CYAN}-w{RESET}, {CYAN}--widget{RESET} {DIM}<name>{RESET}       Set widget (matrix, hex, bars, progress, none)
+  {CYAN}-b{RESET}, {CYAN}--buffer{RESET} {DIM}<chars>{RESET}      Right edge buffer in chars (0-60, default: 30)
   {CYAN}-p{RESET}, {CYAN}--preset{RESET} {DIM}<name>{RESET}       Apply preset (all, minimal, focused)
       {CYAN}--hide{RESET} {DIM}<components>{RESET}   Hide components (comma-separated)
       {CYAN}--show{RESET} {DIM}<components>{RESET}   Show components (comma-separated)
@@ -83,6 +84,7 @@ CUSTOM_HELP = f"""\
   claudetui mode custom -w hex                  {DIM}# switch to hex widget{RESET}
   claudetui mode custom --hide model,cost       {DIM}# hide model and cost{RESET}
   claudetui mode custom --show model            {DIM}# show model again{RESET}
+  claudetui mode custom -b 20                   {DIM}# set buffer to 20 chars{RESET}
   claudetui mode custom -p all -w none          {DIM}# reset all, no widget{RESET}
 """
 
@@ -267,6 +269,7 @@ def build_menu():
     items.append({"type": "header", "label": ""})
     items.append({"type": "widget", "label": "Widget"})
     items.append({"type": "preset", "label": "Preset"})
+    items.append({"type": "buffer", "label": "Buffer"})
     items.append({"type": "header", "label": ""})
     items.append({"type": "save", "label": "Save & exit"})
     return items
@@ -443,6 +446,28 @@ def interactive_curses(custom):
                         pass
                     row += 1
 
+                elif item["type"] == "buffer":
+                    buf_val = custom.get("buffer", 30)
+                    try:
+                        if is_selected:
+                            stdscr.addstr(row, x, "\u25b8 ",
+                                          curses.color_pair(3) | curses.A_BOLD)
+                        else:
+                            stdscr.addstr(row, x, "  ")
+                        stdscr.addstr("Buffer: ",
+                                      curses.A_BOLD if is_selected else 0)
+                        stdscr.addstr("\u25c2 ",
+                                      curses.color_pair(3) | curses.A_BOLD)
+                        stdscr.addstr(f"{buf_val}",
+                                      curses.color_pair(3) | curses.A_BOLD)
+                        stdscr.addstr(" \u25b8",
+                                      curses.color_pair(3) | curses.A_BOLD)
+                        stdscr.addstr(f"  chars from edge",
+                                      curses.A_DIM)
+                    except curses.error:
+                        pass
+                    row += 1
+
                 elif item["type"] == "save":
                     try:
                         if is_selected:
@@ -479,6 +504,8 @@ def interactive_curses(custom):
                     preset_idx = (preset_idx + 1) % len(preset_names)
                     if preset_names[preset_idx] != "custom":
                         apply_preset(custom, preset_names[preset_idx])
+                elif item["type"] == "buffer":
+                    custom["buffer"] = min(60, custom.get("buffer", 30) + 5)
             elif key == curses.KEY_LEFT or key == curses.KEY_RIGHT:
                 item = menu[selectable[cursor_idx]]
                 direction = 1 if key == curses.KEY_RIGHT else -1
@@ -489,6 +516,9 @@ def interactive_curses(custom):
                     preset_idx = (preset_idx + direction) % len(preset_names)
                     if preset_names[preset_idx] != "custom":
                         apply_preset(custom, preset_names[preset_idx])
+                elif item["type"] == "buffer":
+                    buf = custom.get("buffer", 30)
+                    custom["buffer"] = max(0, min(60, buf + direction * 5))
             elif key == ord("\n"):
                 item = menu[selectable[cursor_idx]]
                 if item["type"] == "component":
@@ -502,6 +532,8 @@ def interactive_curses(custom):
                     preset_idx = (preset_idx + 1) % len(preset_names)
                     if preset_names[preset_idx] != "custom":
                         apply_preset(custom, preset_names[preset_idx])
+                elif item["type"] == "buffer":
+                    custom["buffer"] = min(60, custom.get("buffer", 30) + 5)
                 elif item["type"] == "save":
                     return True
             elif key == ord("s"):
@@ -527,7 +559,9 @@ def interactive_curses(custom):
 def print_current(custom):
     """Print current custom configuration."""
     widget = get_widget(custom)
+    buf_val = custom.get("buffer", 30)
     print(f"  {BOLD}Widget:{RESET} {CYAN}{widget}{RESET}")
+    print(f"  {BOLD}Buffer:{RESET} {CYAN}{buf_val}{RESET} chars from edge")
 
     line_labels = {"line1": "Line 1", "line2": "Line 2", "line3": "Line 3"}
 
@@ -609,6 +643,22 @@ def cmd_custom(args):
             print_current(custom)
             i += 1
             continue
+
+        elif arg in ("-b", "--buffer"):
+            if i + 1 >= len(args):
+                print(f"  {RED}\u2717{RESET} --buffer requires a value (0-60)")
+                sys.exit(1)
+            i += 1
+            try:
+                val = int(args[i])
+            except ValueError:
+                print(f"  {RED}\u2717{RESET} --buffer must be a number (0-60)")
+                sys.exit(1)
+            if val < 0 or val > 60:
+                print(f"  {RED}\u2717{RESET} --buffer must be between 0 and 60")
+                sys.exit(1)
+            custom["buffer"] = val
+            modified = True
 
         elif arg in ("-w", "--widget"):
             if i + 1 >= len(args):
