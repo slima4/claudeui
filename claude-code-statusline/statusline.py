@@ -20,6 +20,8 @@ Reads JSON from stdin (provided by Claude Code) containing session data.
 
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -51,6 +53,47 @@ MAGENTA = "\033[95m"
 WHITE = "\033[97m"
 GRAY = "\033[90m"
 DIM = "\033[2m"
+
+_ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+
+
+def _visible_len(s):
+    """Return display width of a string, ignoring ANSI escape codes."""
+    return len(_ANSI_RE.sub("", s))
+
+
+def _get_terminal_cols():
+    """Get real terminal width, even when running as a piped subprocess.
+
+    Walks up the process tree to find an ancestor with a TTY, then queries
+    that TTY device for the actual terminal dimensions.
+    """
+    import fcntl, struct, termios
+    try:
+        pid = os.getpid()
+        for _ in range(10):
+            result = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "ppid=,tty="],
+                capture_output=True, text=True, timeout=1,
+            )
+            parts = result.stdout.split()
+            if len(parts) < 2:
+                break
+            ppid, tty = parts[0], parts[1]
+            if tty not in ("??", ""):
+                fd = os.open(f"/dev/{tty}", os.O_RDONLY)
+                try:
+                    res = fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\x00" * 8)
+                    return struct.unpack("HHHH", res)[1]
+                finally:
+                    os.close(fd)
+            pid = int(ppid)
+            if pid <= 1:
+                break
+    except Exception:
+        pass
+    return shutil.get_terminal_size().columns
+
 
 # Widget system — left-side 3-row animation area
 # Select via custom.widget in claudeui.json, or STATUSLINE_WIDGET env var (default: matrix)
@@ -678,27 +721,59 @@ def main():
             f"{CYAN}{metrics['subagent_count']}{RESET} {dim}agents{RESET}"
         )
 
-    # Line 3: live activity trace
-    line3 = ""
+    # Line 3+: live activity trace (wraps to extra lines if needed)
+    line3_lines = []
     recent = metrics["recent_tools"]
     file_edits = metrics["current_turn_file_edits"]
-    parts3 = []
+    trail_items = []
     if recent and is_visible("line3", "tool_trace"):
-        trail = []
         for t in recent[-6:]:
             p = t.split()
             if len(p) >= 2:
-                trail.append(f"{dim}{p[0].lower()}{RESET} {GREEN}{p[-1]}{RESET}")
+                trail_items.append(f"{dim}{p[0].lower()}{RESET} {GREEN}{p[-1]}{RESET}")
             else:
-                trail.append(f"{dim}{p[0].lower()}{RESET}")
-        parts3.append(f" {dim}\u2192{RESET} ".join(trail))
+                trail_items.append(f"{dim}{p[0].lower()}{RESET}")
+    file_edit_parts = []
     if file_edits and is_visible("line3", "file_edits"):
         top = sorted(file_edits.items(), key=lambda x: -x[1])[:3]
-        parts3.append(" ".join(
+        file_edit_parts = [
             f"{YELLOW}{n}{RESET}{dim}×{c}{RESET}" for n, c in top
-        ))
-    if parts3:
-        line3 = f" {sep.join(parts3)}"
+        ]
+
+    # Wrap trail items across lines based on terminal width
+    term_cols = _get_terminal_cols()
+    widget_offset = 10  # widget (7) + padding (3)
+    max_width = term_cols - widget_offset
+    arrow = f" {dim}\u2192{RESET} "
+    arrow_vis = 4  # " → " visible width
+
+    if trail_items or file_edit_parts:
+        cur_line_parts = []
+        cur_width = 1  # leading space
+        for i, item in enumerate(trail_items):
+            item_width = _visible_len(item)
+            joiner_width = arrow_vis if cur_line_parts else 0
+            if cur_line_parts and cur_width + joiner_width + item_width > max_width:
+                line3_lines.append(f" {arrow.join(cur_line_parts)}")
+                cur_line_parts = [item]
+                cur_width = 1 + item_width
+            else:
+                cur_line_parts.append(item)
+                cur_width += joiner_width + item_width
+        if cur_line_parts:
+            tail = arrow.join(cur_line_parts)
+            if file_edit_parts:
+                edit_str = " ".join(file_edit_parts)
+                edit_width = _visible_len(edit_str)
+                sep_width = _visible_len(sep)
+                if cur_width + sep_width + edit_width <= max_width:
+                    tail += f"{sep}{edit_str}"
+                else:
+                    line3_lines.append(f" {tail}")
+                    tail = f" {edit_str}"
+            line3_lines.append(f" {tail}")
+        elif file_edit_parts:
+            line3_lines.append(f" {' '.join(file_edit_parts)}")
 
     # ── Compact mode: single line with essentials ──
     if compact_mode:
@@ -746,20 +821,22 @@ def main():
 
     line1_str = f" {sep.join(line1_parts)}" if line1_parts else ""
     line2_str = f" {sep.join(line2_parts)}" if line2_parts else ""
-    line3_str = line3 if line3 else ""
 
     if widget_fn:
         wdg = widget_fn(frame=metrics["tool_calls"], ratio=ratio)
         print(f" {wdg[0]}{line1_str}")
         print(f" {wdg[1]}{line2_str}")
-        print(f" {wdg[2]}{line3_str}")
+        first_extra = line3_lines[0] if line3_lines else ""
+        print(f" {wdg[2]}{first_extra}")
+        for extra_line in line3_lines[1:]:
+            print(f"         {extra_line}")
     else:
         if line1_str:
             print(f"{line1_str}")
         if line2_str:
             print(f"{line2_str}")
-        if line3_str:
-            print(f"{line3_str}")
+        for extra_line in line3_lines:
+            print(f"{extra_line}")
 
 
 if __name__ == "__main__":
