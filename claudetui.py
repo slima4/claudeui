@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-_FALLBACK_VERSION = "0.4.1"
+_FALLBACK_VERSION = "0.5.0"
 
 
 def _get_version():
@@ -55,6 +55,7 @@ SUBCOMMANDS = {
     "sessions":   ("python", "claude-code-session-manager/session-manager.py",   "Browse, compare, export sessions"),
     "mode":       ("python", "claude-ui-mode.py",                                "Switch statusline mode (full/compact/custom)"),
     "statusline": ("python", "claude-code-statusline/statusline.py",             "Run statusline (used by Claude Code)"),
+    "sniffer":    ("python", "claude-code-sniffer/sniffer.py",                    "API call interceptor proxy"),
     "setup":      ("bash",   "install.sh",                                       "Configure statusline, hooks, and commands"),
     "uninstall":  ("bash",   "uninstall.sh",                                     "Remove ClaudeTUI configuration"),
 }
@@ -74,6 +75,8 @@ Usage:
 Commands:
   monitor     Live session dashboard (separate terminal)
   chart       Context efficiency chart (token waste per segment)
+  sniffer     API call interceptor (capture raw requests/responses)
+  sniff       Launch claude through sniffer proxy (auto-detects port)
   stats       Post-session analytics
   sessions    Browse, compare, resume, export sessions
   mode        Switch statusline mode (full/compact/custom)
@@ -87,6 +90,9 @@ Options:
 Examples:
   claudetui monitor              # live dashboard
   claudetui chart                # efficiency chart for current session
+  claudetui sniffer              # intercept API calls (start proxy)
+  claudetui sniff                # launch claude through sniffer
+  claudetui sniff --resume abc   # resume session through sniffer
   claudetui stats --days 7 -s    # weekly summary
   claudetui sessions list        # browse sessions
   claudetui mode compact         # switch to 1-line statusline
@@ -124,6 +130,51 @@ def main():
             print(f"claudetui: hook script not found at {target_path}", file=sys.stderr)
             sys.exit(1)
         os.execvp(sys.executable, [sys.executable, target_path] + args[1:])
+
+    # Sniff dispatch: claudetui sniff [--port PORT] [claude args...]
+    if cmd == "sniff":
+        sniff_port = None
+        claude_args = args
+
+        # Parse --port from sniff args
+        if len(args) >= 2 and args[0] == "--port":
+            sniff_port = args[1]
+            claude_args = args[2:]
+
+        port_dir = os.path.join(
+            os.path.expanduser("~"), ".claude", "api-sniffer"
+        )
+
+        if sniff_port:
+            # User specified a port — verify sniffer is running
+            port_file = os.path.join(port_dir, f".port.{sniff_port}")
+            if not os.path.exists(port_file):
+                print(f"  Sniffer not found on port {sniff_port} — starting claude without proxy")
+                sniff_port = None
+        else:
+            # Auto-detect: find any running sniffer
+            try:
+                port_files = sorted(
+                    f for f in os.listdir(port_dir)
+                    if f.startswith(".port.")
+                )
+            except FileNotFoundError:
+                port_files = []
+
+            if len(port_files) == 1:
+                sniff_port = port_files[0].split(".", 2)[2]
+            elif len(port_files) > 1:
+                ports = [f.split(".", 2)[2] for f in port_files]
+                print(f"  Multiple sniffers running: {', '.join(ports)}")
+                print(f"  Use: claudetui sniff --port <port> [claude args...]")
+                sys.exit(1)
+            else:
+                print("  Sniffer not running — starting claude without proxy")
+
+        if sniff_port:
+            os.environ["ANTHROPIC_BASE_URL"] = f"http://localhost:{sniff_port}"
+            print(f"  Routing through sniffer on port {sniff_port}")
+        os.execvp("claude", ["claude"] + claude_args)
 
     if cmd not in SUBCOMMANDS:
         print(f"claudetui: unknown command '{cmd}'\n", file=sys.stderr)

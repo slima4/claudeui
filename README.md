@@ -59,6 +59,8 @@ claude                    # statusline + hooks work automatically
 claudetui monitor         # live dashboard in a second terminal
 claudetui chart           # context efficiency chart
 claudetui stats           # post-session analytics
+claudetui sniffer         # start API call interceptor proxy
+claudetui sniff           # launch claude through sniffer
 claudetui sessions list   # browse all sessions
 claudetui mode compact    # switch to 1-line statusline
 claudetui mode full       # switch to 3-line statusline
@@ -232,6 +234,33 @@ python3 claude-code-monitor/monitor.py           # auto-detect active session
 python3 claude-code-monitor/monitor.py --list     # list recent sessions
 claudetui chart                                   # context efficiency chart (standalone)
 # While running: stats  details  log  chart  export  sessions  config  ?help  quit
+```
+
+### [claude-code-sniffer](./claude-code-sniffer/)
+
+API call interceptor proxy. Captures every request and response between Claude Code and Anthropic's servers — including raw system prompts, HTTP headers, latency, and the hidden compaction API call not logged in transcripts.
+
+```
+Claude Code  ──plain HTTP──▶  Sniffer (localhost:7735)  ──HTTPS──▶  api.anthropic.com
+                                    │
+                                    ▼
+                          ~/.claude/api-sniffer/*.jsonl
+```
+
+```bash
+# Terminal 1: Start the sniffer
+claudetui sniffer
+
+# Terminal 2: Launch Claude Code through the sniffer
+claudetui sniff
+claudetui sniff --resume abc123
+```
+
+```
+  #1   POST /v1/messages  opus-4-6  45.2k->1.5k  $0.120  2312ms  740KB/4.2KB  98%c  [Tt]
+  #2   POST /v1/messages  opus-4-6  48.1k->0.8k  $0.094  1134ms  741KB/2.1KB  99%c  [TU]  Edit
+  #3   POST /v1/messages  opus-4-6  12.3k->2.1k  $0.041  3412ms  42KB/6.8KB   95%c  [Tt]  compaction
+  #4   POST /v1/messages  sonnet-4-6  14.3k->2.1k  $0.008  2341ms  42KB/6.8KB  [Tt]  +agent.1
 ```
 
 ### [claude-code-hooks](./claude-code-hooks/)

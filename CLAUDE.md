@@ -68,6 +68,24 @@ Live session dashboard for a separate terminal.
 - Agent tracking: logs spawns/completions in event log; CURRENT section shows active/total agents per turn
 - Skill tracking: logs skill invocations in event log; CURRENT section shows active skill while running
 
+### claude-code-sniffer
+
+API call interceptor proxy. Self-contained single-file script.
+
+- Entry point: `claude-code-sniffer/sniffer.py`
+- Transparent HTTP proxy using `ANTHROPIC_BASE_URL=http://localhost:PORT`
+- Receives plain HTTP from Claude Code, forwards to `https://api.anthropic.com` over HTTPS
+- Captures raw request/response bodies, HTTP headers, latency, SSE streaming events
+- Console shows: tokens, cost, latency, traffic size, cache ratio, content block types, tool names, sub-agents
+- Content block types: `T`=thinking, `t`=text, `U`=tool_use, `S`=server_tool_use, `W`=web_search_tool_result, `M`/`m`=mcp
+- Sub-agent tracking: detects new session IDs, labels as `+agent.1` (new) / `agent.1` (known)
+- Compaction detection: per-session, same-model comparison of message history size
+- Logs to `~/.claude/api-sniffer/sniffer-{timestamp}.jsonl`
+- CLI: `claudetui sniffer [--port PORT] [--full] [--no-redact] [--quiet]`
+- Launch helper: `claudetui sniff [--port PORT] [claude args...]` — auto-detects sniffer port, falls back to direct launch
+- Multi-port: each sniffer writes `~/.claude/api-sniffer/.port.{PORT}`, cleaned up on shutdown
+- API keys redacted from logs by default; log files created with `0o600` permissions
+
 ### claude-code-hooks
 
 Claude Code hooks for automatic in-session context. Three hook scripts:
